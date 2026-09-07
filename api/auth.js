@@ -11,16 +11,6 @@ function getAction(req, body) {
 
 async function handleLogin(res, body) {
   const { email, password } = body;
-  if (email === "admin" && password === "admin") {
-    sendJson(res, 200, {
-      uid: "local-admin",
-      email: "admin@local.test",
-      idToken: "local-admin-token",
-      refreshToken: "local-admin-refresh",
-      isLocalAdmin: true,
-    });
-    return;
-  }
   const apiKey = process.env.FIREBASE_WEB_API_KEY;
   if (!apiKey) return sendJson(res, 500, { error: "Missing FIREBASE_WEB_API_KEY in env" });
   if (!email || !password) return sendJson(res, 400, { error: "email and password are required" });
@@ -65,9 +55,6 @@ async function handleChangePassword(res, body) {
   const { idToken, newPassword } = body;
   if (!idToken || !newPassword) {
     return sendJson(res, 400, { error: "idToken and newPassword are required" });
-  }
-  if (idToken === "local-admin-token") {
-    return sendJson(res, 200, { ok: true, message: "admin test account password change skipped" });
   }
   const apiKey = process.env.FIREBASE_WEB_API_KEY;
   if (!apiKey) return sendJson(res, 500, { error: "Missing FIREBASE_WEB_API_KEY in env" });

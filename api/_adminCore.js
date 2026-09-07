@@ -8,8 +8,14 @@ const PRESENCE_COLLECTION = "handam_presence";
 const ADMIN_DOC = "handam_admin/config";
 const ACTIVE_WINDOW_MS = 15 * 60 * 1000;
 
+function isProductionRuntime() {
+  return process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL);
+}
+
 function jwtSecret() {
-  return process.env.ADMIN_JWT_SECRET || "handam-dev-admin-secret-change-me";
+  if (process.env.ADMIN_JWT_SECRET) return process.env.ADMIN_JWT_SECRET;
+  if (isProductionRuntime()) throw new Error("ADMIN_JWT_SECRET 환경변수가 필요합니다.");
+  return "handam-dev-admin-secret-change-me";
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -53,9 +59,14 @@ function verifyAdminToken(token) {
 }
 
 function defaultConfig() {
-  const { salt, hash } = hashPassword(process.env.ADMIN_PASSWORD || "admin");
+  const username = process.env.ADMIN_USERNAME || (isProductionRuntime() ? "" : "admin");
+  const password = process.env.ADMIN_PASSWORD || (isProductionRuntime() ? "" : "admin");
+  if (!username || !password) {
+    throw new Error("운영 환경에는 ADMIN_USERNAME과 ADMIN_PASSWORD가 필요합니다.");
+  }
+  const { salt, hash } = hashPassword(password);
   return {
-    username: process.env.ADMIN_USERNAME || "admin",
+    username,
     salt,
     passwordHash: hash,
     updatedAt: new Date().toISOString(),

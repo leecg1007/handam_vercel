@@ -73,10 +73,16 @@ const state = {
 };
 const googleProvider = new GoogleAuthProvider();
 const AUTH_PAGES = new Set(["login", "signup", "find-account", "admin"]);
+const LAST_ACCOUNTS_KEY = "handam-last-accounts";
+const PASSWORD_RESET_COOLDOWN_MS = 30_000;
 let presenceTimer = null;
 let dbWorker, workerSeq = 0;
 let cloudLoadUid = null;
 let cloudLoadPromise = null;
+let pendingSignupProfile = null;
+let passwordResetCooldownTimer = null;
+let passwordResetCooldownUntil = 0;
+let sheetReturnFocus = null;
 const workerWaiters = new Map();
 const promptRotation = { default: 0 };
 let promptByMood = {};
@@ -151,6 +157,35 @@ function saveProfile(uid, patch) {
   localStorage.setItem(profileStorageKey(uid), JSON.stringify(next));
   if (state.auth?.uid === uid) state.profile = next;
   return next;
+}
+function maskAccountEmail(email) {
+  const normalized = String(email || "").trim().toLowerCase();
+  const at = normalized.indexOf("@");
+  if (at <= 0) return "";
+  const local = normalized.slice(0, at);
+  const domain = normalized.slice(at + 1);
+  if (!domain) return "";
+  return `${local.slice(0, 1)}***@${domain}`;
+}
+function loadLastAccounts() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(LAST_ACCOUNTS_KEY) || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((entry) => typeof entry?.maskedEmail === "string" && entry.maskedEmail.includes("@"))
+      .slice(0, 3);
+  } catch (_error) {
+    return [];
+  }
+}
+function rememberLastAccount(email) {
+  const maskedEmail = maskAccountEmail(email);
+  if (!maskedEmail) return;
+  const next = [
+    { maskedEmail, lastUsedAt: new Date().toISOString() },
+    ...loadLastAccounts().filter((entry) => entry.maskedEmail !== maskedEmail),
+  ].slice(0, 3);
+  localStorage.setItem(LAST_ACCOUNTS_KEY, JSON.stringify(next));
 }
 function firestoreTimestampToIso(value, fallback = new Date().toISOString()) {
   if (value?.toDate) return value.toDate().toISOString();
@@ -266,7 +301,7 @@ async function migrateLegacyDiariesOnce(uid, migrationVersion = 0) {
   if (state.profile) state.profile.migrationVersion = 1;
   return 1;
 }
-async function loadCloudUserData(user) {
+async function loadCloudUserData(user, profileOverride = null) {
   const uid = user.uid;
   const cached = loadCachedSettings(uid);
   applyUserSettings(cached);
@@ -281,8 +316,8 @@ async function loadCloudUserData(user) {
     });
     state.profile = {
       ...(state.profile || {}),
-      displayName: userData.displayName || user.displayName || state.profile?.displayName || "한담",
-      email: userData.email || user.email || state.profile?.email || "",
+      displayName: profileOverride?.displayName || userData.displayName || user.displayName || state.profile?.displayName || "한담",
+      email: profileOverride?.email || userData.email || user.email || state.profile?.email || "",
       migrationVersion: Number(userData.migrationVersion || 0),
     };
     cacheSettings(uid, settings);
@@ -842,7 +877,11 @@ function prepareImageForOcr(file, maxEdge = 1920, quality = 0.88) {
   });
 }
 function currentPageId() { return document.querySelector(".page.active")?.id?.replace("page-", "") || ""; }
-async function setAuthFromUser(user) {
+async function setAuthFromUser(user, { profileOverride = null } = {}) {
+  const signupOverride = pendingSignupProfile?.email === String(user.email || "").trim().toLowerCase()
+    ? pendingSignupProfile
+    : null;
+  const resolvedOverride = profileOverride || signupOverride;
   const idToken = await user.getIdToken();
   state.auth = {
     uid: user.uid,
@@ -851,13 +890,15 @@ async function setAuthFromUser(user) {
   };
   state.profile = loadProfile(user.uid);
   const patch = {};
-  if (!state.profile?.displayName && user.displayName) patch.displayName = user.displayName;
-  if (!state.profile?.email && user.email) patch.email = user.email;
+  if (resolvedOverride?.displayName) patch.displayName = resolvedOverride.displayName;
+  else if (!state.profile?.displayName && user.displayName) patch.displayName = user.displayName;
+  if (resolvedOverride?.email) patch.email = resolvedOverride.email;
+  else if (!state.profile?.email && user.email) patch.email = user.email;
   if (Object.keys(patch).length) state.profile = saveProfile(user.uid, patch);
-  localStorage.setItem("handam-auth", JSON.stringify(state.auth));
+  rememberLastAccount(user.email);
   if (cloudLoadUid !== user.uid || !cloudLoadPromise) {
     cloudLoadUid = user.uid;
-    cloudLoadPromise = loadCloudUserData(user);
+    cloudLoadPromise = loadCloudUserData(user, resolvedOverride);
   }
   await cloudLoadPromise;
   startPresenceHeartbeat();
@@ -869,14 +910,24 @@ function authErrorMessage(error, context = {}) {
     return "Firebase 인증 설정이 비어 있어요. Authentication에서 로그인 제공자를 활성화해주세요.";
   }
   if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found") {
-    return "이메일 또는 비밀번호를 확인해주세요.";
+    return context.flow === "reset"
+      ? "입력한 이메일이 등록되어 있다면 재설정 메일을 보내드려요."
+      : "이메일 또는 비밀번호를 확인해주세요.";
   }
+  if (code === "auth/email-already-in-use") return "이미 사용 중인 이메일이에요. 로그인하거나 비밀번호 찾기를 이용해주세요.";
+  if (code === "auth/invalid-email") return "이메일 형식을 확인해주세요.";
+  if (code === "auth/weak-password") return "비밀번호는 6자 이상 입력해주세요.";
+  if (code === "auth/network-request-failed") return "인터넷 연결을 확인한 뒤 다시 시도해주세요.";
+  if (code === "auth/requires-recent-login") return "보안을 위해 다시 로그인한 뒤 시도해주세요.";
   if (code === "auth/popup-closed-by-user") return "로그인 창이 닫혔어요. 다시 시도해주세요.";
+  if (code === "auth/popup-blocked") return "팝업이 차단됐어요. 브라우저에서 팝업을 허용한 뒤 다시 시도해주세요.";
   if (code === "auth/operation-not-allowed") {
     return "해당 로그인 방식이 비활성화되어 있어요. Firebase Console에서 활성화해주세요.";
   }
   if (code === "auth/too-many-requests") return "요청이 너무 많아요. 잠시 후 다시 시도해주세요.";
-  return message || "인증 처리에 실패했어요.";
+  if (context.flow === "signup") return "회원가입을 완료하지 못했어요. 입력 내용을 확인하고 다시 시도해주세요.";
+  if (context.flow === "reset") return "재설정 메일 요청을 완료하지 못했어요. 잠시 후 다시 시도해주세요.";
+  return message && !message.startsWith("Firebase:") ? message : "인증 처리에 실패했어요.";
 }
 
 function replayRevealAnimations(pageEl) {
@@ -906,6 +957,7 @@ function go(id) {
   window.handamAdmin?.unmount();
   const target = document.getElementById("page-" + id);
   if (!target) return;
+  if (AUTH_PAGES.has(id)) closeSheet({ restoreFocus: false });
   document.querySelectorAll(".page").forEach((p) => p.classList.toggle("active", p === target));
   document.querySelectorAll(".nav-item").forEach((n) => {
     const active = n.dataset.page === id;
@@ -914,6 +966,8 @@ function go(id) {
     else n.removeAttribute("aria-current");
   });
   document.querySelector(".device")?.classList.toggle("auth-mode", AUTH_PAGES.has(id));
+  const device = document.querySelector(".device");
+  if (device) device.scrollTop = 0;
   target.scrollTop = 0;
   replayRevealAnimations(target);
   if (id === "diary") resetOCR();
@@ -931,7 +985,14 @@ function go(id) {
     renderFortuneUI();
   }
   if (id === "backup") updateBackupStats();
-
+  if (AUTH_PAGES.has(id)) {
+    requestAnimationFrame(() => {
+      const heading = target.querySelector("h1");
+      if (!heading) return;
+      if (!heading.hasAttribute("tabindex")) heading.setAttribute("tabindex", "-1");
+      heading.focus({ preventScroll: true });
+    });
+  }
 }
 function applyTheme(t, { save = true } = {}) {
   const theme = t === "dark" ? "dark" : "light";
@@ -970,16 +1031,28 @@ function showToast(message) {
 function openSheet() {
   const scrim = document.getElementById("scrim");
   const sheet = document.getElementById("sheet");
+  sheetReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  sheet.removeAttribute("inert");
+  sheet.setAttribute("aria-hidden", "false");
+  scrim.setAttribute("aria-hidden", "false");
   scrim.classList.add("show");
   sheet.classList.add("show");
-  requestAnimationFrame(() => sheet.classList.add("sheet-entered"));
+  requestAnimationFrame(() => {
+    sheet.classList.add("sheet-entered");
+    sheet.querySelector("select")?.focus({ preventScroll: true });
+  });
 }
-function closeSheet() {
+function closeSheet({ restoreFocus = true } = {}) {
   const scrim = document.getElementById("scrim");
   const sheet = document.getElementById("sheet");
   sheet.classList.remove("sheet-entered");
   scrim.classList.remove("show");
   sheet.classList.remove("show");
+  sheet.setAttribute("aria-hidden", "true");
+  sheet.setAttribute("inert", "");
+  scrim.setAttribute("aria-hidden", "true");
+  if (restoreFocus && sheetReturnFocus?.isConnected) sheetReturnFocus.focus({ preventScroll: true });
+  sheetReturnFocus = null;
 }
 function animateGauge() {
   const ring = document.getElementById("gauge-ring");
@@ -1282,6 +1355,82 @@ async function deleteCurrentRecord() {
   }
 }
 
+function clearAuthFeedback(form) {
+  if (!form) return;
+  form.querySelectorAll("[aria-invalid='true']").forEach((input) => input.removeAttribute("aria-invalid"));
+  form.querySelectorAll(".field-error,.form-error").forEach((message) => {
+    message.textContent = "";
+    message.hidden = true;
+  });
+}
+function setAuthFieldError(fieldId, message) {
+  const field = document.getElementById(fieldId);
+  const error = document.getElementById(`${fieldId}-error`);
+  if (field) {
+    field.setAttribute("aria-invalid", "true");
+    requestAnimationFrame(() => field.focus({ preventScroll: true }));
+  }
+  if (error) {
+    error.textContent = message;
+    error.hidden = false;
+  }
+  showToast(message);
+  return false;
+}
+function setAuthFormError(formId, message) {
+  const error = document.getElementById(`${formId}-error`);
+  if (error) {
+    error.textContent = message;
+    error.hidden = false;
+  }
+  showToast(message);
+}
+function setAuthButtonPending(button, pending, pendingLabel = "처리 중…") {
+  if (!button) return;
+  const label = button.querySelector("[data-button-label]");
+  if (label && !button.dataset.defaultLabel) button.dataset.defaultLabel = label.textContent.trim();
+  if (label) label.textContent = pending ? pendingLabel : button.dataset.defaultLabel;
+  button.disabled = pending;
+  button.setAttribute("aria-busy", String(pending));
+}
+function isEmailAddress(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+function renderPasswordResetSuccess() {
+  const result = document.getElementById("find-reset-result");
+  if (!result) return;
+  result.replaceChildren();
+  const title = document.createElement("strong");
+  title.textContent = "요청을 확인했어요.";
+  const copy = document.createElement("p");
+  copy.textContent = "입력한 이메일이 등록되어 있다면 재설정 링크가 발송됩니다. 받은편지함과 스팸함을 확인해주세요.";
+  result.append(title, copy);
+  result.hidden = false;
+}
+function updatePasswordResetCooldown() {
+  const button = document.getElementById("password-reset-submit");
+  if (!button) return;
+  const label = button.querySelector("[data-button-label]");
+  const remaining = Math.ceil((passwordResetCooldownUntil - Date.now()) / 1000);
+  if (remaining > 0) {
+    button.disabled = true;
+    button.setAttribute("aria-disabled", "true");
+    if (label) label.textContent = `다시 보내기 (${remaining}초)`;
+    return;
+  }
+  clearInterval(passwordResetCooldownTimer);
+  passwordResetCooldownTimer = null;
+  button.disabled = false;
+  button.removeAttribute("aria-disabled");
+  if (label) label.textContent = button.dataset.defaultLabel || "재설정 메일 보내기";
+}
+function startPasswordResetCooldown() {
+  passwordResetCooldownUntil = Date.now() + PASSWORD_RESET_COOLDOWN_MS;
+  clearInterval(passwordResetCooldownTimer);
+  updatePasswordResetCooldown();
+  passwordResetCooldownTimer = setInterval(updatePasswordResetCooldown, 1000);
+}
+
 async function loginAsAdmin(username, password) {
   const data = await apiPost("/api/admin/login", { username, password });
   state.admin = { token: data.token, username: data.username };
@@ -1290,91 +1439,145 @@ async function loginAsAdmin(username, password) {
   showToast("관리자 로그인 성공");
   go("admin");
 }
-async function login() {
+async function login(event) {
+  event?.preventDefault();
+  const form = document.getElementById("login-form");
+  const submit = form?.querySelector("[type='submit']");
+  if (submit?.disabled) return;
+  clearAuthFeedback(form);
   const email = document.getElementById("login-email").value.trim();
   const password = document.getElementById("login-password").value;
-  if (!email || !password) return showToast("이메일과 비밀번호를 입력해주세요.");
-
-  // 관리자 아이디는 이메일 형식이 아닌 경우가 많음 → 관리자 API로 먼저 시도
-  if (!email.includes("@")) {
-    try {
-      await loginAsAdmin(email, password);
-    } catch (error) {
-      showToast(error.message || "관리자 로그인에 실패했어요.");
-    }
-    return;
-  }
+  if (!email) return setAuthFieldError("login-email", "이메일 또는 관리자 아이디를 입력해주세요.");
+  if (email.includes("@") && !isEmailAddress(email)) return setAuthFieldError("login-email", "이메일 형식을 확인해주세요.");
+  if (!password) return setAuthFieldError("login-password", "비밀번호를 입력해주세요.");
+  setAuthButtonPending(submit, true, "로그인 중…");
 
   try {
+    if (!email.includes("@")) {
+      await loginAsAdmin(email, password);
+      return;
+    }
     const credential = await signInWithEmailAndPassword(auth, email, password);
     await setAuthFromUser(credential.user);
     showToast("로그인 성공");
     go("home");
   } catch (error) {
-    // 이메일 형식 관리자 아이디 대비: 일반 로그인 실패 시 관리자 API도 시도
-    try {
-      await loginAsAdmin(email, password);
-      return;
-    } catch (_adminError) {
-      showToast(authErrorMessage(error));
-    }
+    const message = email.includes("@")
+      ? authErrorMessage(error, { flow: "login" })
+      : error?.message || "관리자 로그인에 실패했어요.";
+    setAuthFormError("login-form", message);
+  } finally {
+    setAuthButtonPending(submit, false);
   }
 }
-async function registerFromSignup() {
+async function registerFromSignup(event) {
+  event?.preventDefault();
+  const form = document.getElementById("signup-form");
+  const submit = form?.querySelector("[type='submit']");
+  if (submit?.disabled) return;
+  clearAuthFeedback(form);
   const displayName = document.getElementById("signup-name").value.trim();
   const email = document.getElementById("signup-email").value.trim();
   const password = document.getElementById("signup-password").value;
   const confirm = document.getElementById("signup-password-confirm").value;
-  if (!displayName) return showToast("이름을 입력해주세요.");
-  if (!email) return showToast("이메일을 입력해주세요.");
-  if (!password || password.length < 6) return showToast("비밀번호는 6자 이상이어야 해요.");
-  if (password !== confirm) return showToast("비밀번호 확인이 일치하지 않아요.");
+  if (!displayName) return setAuthFieldError("signup-name", "이름을 입력해주세요.");
+  if (!email) return setAuthFieldError("signup-email", "이메일을 입력해주세요.");
+  if (!isEmailAddress(email)) return setAuthFieldError("signup-email", "이메일 형식을 확인해주세요.");
+  if (!password || password.length < 6) return setAuthFieldError("signup-password", "비밀번호는 6자 이상이어야 해요.");
+  if (password !== confirm) return setAuthFieldError("signup-password-confirm", "비밀번호 확인이 일치하지 않아요.");
+  setAuthButtonPending(submit, true, "가입 중…");
+  pendingSignupProfile = { displayName, email: email.toLowerCase() };
   try {
     const credential = await createUserWithEmailAndPassword(auth, email, password);
-    await updateProfile(credential.user, { displayName });
     saveProfile(credential.user.uid, { displayName, email });
-    await setAuthFromUser(credential.user);
-    showToast(`${displayName}님, 가입을 환영해요!`);
+    let profileSyncFailed = false;
+    try {
+      await updateProfile(credential.user, { displayName });
+    } catch (_error) {
+      profileSyncFailed = true;
+    }
+    await setAuthFromUser(credential.user, { profileOverride: pendingSignupProfile });
+    showToast(profileSyncFailed ? "가입을 완료했어요. 표시 이름은 계정 데이터에 안전하게 저장했어요." : `${displayName}님, 가입을 환영해요!`);
     go("home");
   } catch (error) {
-    showToast(authErrorMessage(error));
+    setAuthFormError("signup-form", authErrorMessage(error, { flow: "signup" }));
+  } finally {
+    pendingSignupProfile = null;
+    setAuthButtonPending(submit, false);
   }
 }
-async function sendPasswordReset() {
+async function sendPasswordReset(event) {
+  event?.preventDefault();
+  const form = document.getElementById("password-reset-form");
+  const submit = document.getElementById("password-reset-submit");
+  if (submit?.disabled || Date.now() < passwordResetCooldownUntil) return;
+  clearAuthFeedback(form);
   const email = document.getElementById("find-email").value.trim();
-  if (!email) return showToast("가입 시 사용한 이메일을 입력해주세요.");
+  if (!email) return setAuthFieldError("find-email", "가입 시 사용한 이메일을 입력해주세요.");
+  if (!isEmailAddress(email)) return setAuthFieldError("find-email", "이메일 형식을 확인해주세요.");
   const result = document.getElementById("find-reset-result");
+  if (result) result.hidden = true;
+  setAuthButtonPending(submit, true, "요청 중…");
+  let shouldCooldown = false;
   try {
     await sendPasswordResetEmail(auth, email, {
       url: getAppPublicUrl() + "/",
       handleCodeInApp: false,
     });
-    if (result) {
-      result.style.display = "block";
-      result.innerHTML =
-        "<strong>메일을 보냈어요.</strong><br>받은편지함과 <b>스팸함</b>을 모두 확인해주세요. 발신: noreply@handam-981b6.firebaseapp.com<br><br>메일이 없으면 관리자에게 문의하거나, 관리자 페이지에서 비밀번호를 직접 초기화할 수 있어요.";
-    }
-    showToast("재설정 메일을 보냈어요. 스팸함도 확인해주세요.");
+    shouldCooldown = true;
+    renderPasswordResetSuccess();
+    showToast("요청을 확인했어요. 받은편지함과 스팸함을 확인해주세요.");
   } catch (error) {
-    if (result) result.style.display = "none";
-    showToast(authErrorMessage(error));
+    if (error?.code === "auth/user-not-found") {
+      shouldCooldown = true;
+      renderPasswordResetSuccess();
+      showToast("요청을 확인했어요. 받은편지함과 스팸함을 확인해주세요.");
+    } else {
+      setAuthFormError("password-reset-form", authErrorMessage(error, { flow: "reset" }));
+    }
+  } finally {
+    setAuthButtonPending(submit, false);
+    if (shouldCooldown) startPasswordResetCooldown();
   }
 }
 function showFindHint() {
-  const email = document.getElementById("find-id-email").value.trim();
   const hint = document.getElementById("find-id-result");
-  if (!email) return showToast("이메일 일부를 입력해주세요.");
-  const stored = state.auth?.email || "";
-  if (stored && stored.toLowerCase().includes(email.toLowerCase())) {
-    const masked = stored.replace(/(^.).*(@.*$)/, "$1***$2");
-    hint.textContent = `현재 기기에 저장된 계정: ${masked}`;
-    hint.style.display = "block";
+  const clearButton = document.getElementById("find-id-clear");
+  const accounts = loadLastAccounts();
+  hint.replaceChildren();
+  if (!accounts.length) {
+    hint.textContent = "이 기기에 저장된 계정 기록이 없어요. 가입 이메일을 알고 있다면 비밀번호 찾기를 이용해주세요.";
+    hint.hidden = false;
+    if (clearButton) clearButton.hidden = true;
     return;
   }
-  hint.textContent = "이 기기에는 해당 정보가 없어요. 가입 시 사용한 이메일 전체로 비밀번호 찾기를 이용해주세요.";
-  hint.style.display = "block";
+  const title = document.createElement("strong");
+  title.textContent = "최근 사용한 계정";
+  const list = document.createElement("ul");
+  list.className = "auth-account-list";
+  accounts.forEach((account) => {
+    const item = document.createElement("li");
+    const icon = document.createElement("i");
+    icon.className = "fa-solid fa-user";
+    icon.setAttribute("aria-hidden", "true");
+    const text = document.createElement("span");
+    text.textContent = account.maskedEmail;
+    item.append(icon, text);
+    list.appendChild(item);
+  });
+  hint.append(title, list);
+  hint.hidden = false;
+  if (clearButton) clearButton.hidden = false;
+}
+function clearFindHints() {
+  localStorage.removeItem(LAST_ACCOUNTS_KEY);
+  showFindHint();
+  showToast("이 기기의 계정 기록을 지웠어요.");
 }
 async function loginWithGoogle() {
+  const button = document.getElementById("google-login-button");
+  if (button?.disabled) return;
+  setAuthButtonPending(button, true, "Google 로그인 중…");
   try {
     const credential = await signInWithPopup(auth, googleProvider);
     const user = credential.user;
@@ -1383,7 +1586,9 @@ async function loginWithGoogle() {
     showToast(`${getDisplayName()}님, 환영해요!`);
     go("home");
   } catch (error) {
-    showToast(authErrorMessage(error));
+    setAuthFormError("login-form", authErrorMessage(error, { flow: "login" }));
+  } finally {
+    setAuthButtonPending(button, false);
   }
 }
 async function logout() {
@@ -1444,7 +1649,6 @@ async function changePassword() {
     await updatePassword(user, nextPassword);
     const idToken = await user.getIdToken(true);
     state.auth = { uid: user.uid, email: user.email, idToken };
-    localStorage.setItem("handam-auth", JSON.stringify(state.auth));
     showToast("비밀번호를 변경했어요.");
   } catch (error) { showToast(error.message || "비밀번호 변경에 실패했어요."); }
 }
@@ -1816,7 +2020,7 @@ function bindSettingsPage() {
 }
 
 function bindSegmentButtons() {
-  document.querySelectorAll(".seg:not(.seg-elastic)").forEach((seg) => {
+  document.querySelectorAll(".seg:not(.seg-elastic):not(#find-tabs)").forEach((seg) => {
     seg.addEventListener("click", (e) => {
       const btn = e.target.closest("button");
       if (!btn) return;
@@ -1848,27 +2052,99 @@ window.loginWithGoogle = loginWithGoogle;
 window.registerFromSignup = registerFromSignup;
 window.sendPasswordReset = sendPasswordReset;
 window.showFindHint = showFindHint;
+window.clearFindHints = clearFindHints;
 window.adminLogout = adminLogout;
 window.changePassword = changePassword; window.exportDiaries = exportDiaries; window.showToast = showToast; window.openSheet = openSheet; window.closeSheet = closeSheet;
 
+function showFindAccountTab(tab, { focus = false } = {}) {
+  const selected = tab === "id" ? "id" : "password";
+  document.querySelectorAll("[data-find-tab]").forEach((button) => {
+    const active = button.dataset.findTab === selected;
+    button.classList.toggle("on", active);
+    button.setAttribute("aria-selected", String(active));
+    button.tabIndex = active ? 0 : -1;
+    if (active && focus) button.focus({ preventScroll: true });
+  });
+  ["password", "id"].forEach((name) => {
+    const panel = document.getElementById(`find-panel-${name}`);
+    if (panel) panel.hidden = name !== selected;
+  });
+  const device = document.querySelector(".device");
+  if (device) device.scrollTop = 0;
+}
 function bindFindAccountTabs() {
-  document.querySelectorAll("[data-find-tab]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const tab = btn.dataset.findTab;
-      document.querySelectorAll("[data-find-tab]").forEach((b) => b.classList.toggle("on", b === btn));
-      document.getElementById("find-panel-password").style.display = tab === "password" ? "block" : "none";
-      document.getElementById("find-panel-id").style.display = tab === "id" ? "block" : "none";
+  const tabs = [...document.querySelectorAll("[data-find-tab]")];
+  tabs.forEach((button, index) => {
+    button.addEventListener("click", () => showFindAccountTab(button.dataset.findTab));
+    button.addEventListener("keydown", (event) => {
+      let next = null;
+      if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % tabs.length;
+      else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index + tabs.length - 1) % tabs.length;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = tabs.length - 1;
+      if (next === null) return;
+      event.preventDefault();
+      showFindAccountTab(tabs[next].dataset.findTab, { focus: true });
     });
+  });
+}
+function bindAuthUI() {
+  document.getElementById("login-form")?.addEventListener("submit", login);
+  document.getElementById("signup-form")?.addEventListener("submit", registerFromSignup);
+  document.getElementById("password-reset-form")?.addEventListener("submit", sendPasswordReset);
+  document.querySelectorAll("[data-auth-go]").forEach((button) => {
+    button.addEventListener("click", () => go(button.dataset.authGo));
+  });
+  document.querySelectorAll("[data-auth-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const action = button.dataset.authAction;
+      if (action === "google-login") void loginWithGoogle();
+      else if (action === "show-account-hints") showFindHint();
+      else if (action === "clear-account-hints") clearFindHints();
+    });
+  });
+  document.querySelectorAll("[data-password-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const input = document.getElementById(button.dataset.passwordToggle);
+      if (!input) return;
+      const revealing = input.type === "password";
+      input.type = revealing ? "text" : "password";
+      button.setAttribute("aria-label", `${button.dataset.passwordToggle.includes("confirm") ? "비밀번호 확인" : "비밀번호"} ${revealing ? "숨기기" : "표시"}`);
+      const icon = button.querySelector("i");
+      if (icon) icon.className = `fa-solid ${revealing ? "fa-eye-slash" : "fa-eye"}`;
+      input.focus({ preventScroll: true });
+    });
+  });
+  document.querySelectorAll("#page-login input,#page-signup input,#page-find-account input").forEach((input) => {
+    input.addEventListener("input", () => {
+      input.removeAttribute("aria-invalid");
+      const error = document.getElementById(`${input.id}-error`);
+      if (error) {
+        error.textContent = "";
+        error.hidden = true;
+      }
+      const formError = input.closest("form")?.querySelector(".form-error");
+      if (formError) {
+        formError.textContent = "";
+        formError.hidden = true;
+      }
+    });
+  });
+  document.querySelector("[data-sheet-dismiss]")?.addEventListener("click", () => closeSheet());
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && document.getElementById("sheet")?.classList.contains("show")) closeSheet();
   });
 }
 
 
 (async function bootstrap() {
+  // Legacy builds persisted a short-lived ID token here. Remove it and keep only masked account hints.
+  localStorage.removeItem("handam-auth");
   state.settings = loadCachedSettings("guest");
   state.settings.theme = localStorage.getItem("handam-theme") || state.settings.theme;
   applyUserSettings(state.settings, { applyFortune: false });
   await loadAppData();
-  bindSegmentButtons(); bindFindAccountTabs(); bindSettingsPage();
+  bindSegmentButtons(); bindFindAccountTabs(); bindAuthUI(); bindSettingsPage();
   bindHomeWeekStrip();
   initFortune();
   fillBirthdaySelects();

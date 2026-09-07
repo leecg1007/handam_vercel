@@ -4,5 +4,5 @@ export default defineConfig({
   outputDir: "output/playwright/results",
   reporter: [["list"], ["html", { outputFolder: "output/playwright/report", open: "never" }]],
   use: { baseURL: "http://127.0.0.1:4187", channel: "msedge", headless: true, trace: "retain-on-failure", screenshot: "only-on-failure" },
-  webServer: { command: "node tests/static-server.cjs", port: 4187, reuseExistingServer: false },
+  webServer: { command: "node tests/static-server.cjs", port: 4187, reuseExistingServer: !process.env.CI },
 });

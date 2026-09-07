@@ -114,7 +114,8 @@ npm run start
    - `npm run start`
    - 로그인/회원가입 테스트
    - 비밀번호 변경 테스트
-   - 테스트 계정: `admin` / `admin`
+   - 로컬 개발에서는 환경변수가 없을 때만 `admin` / `admin`을 사용할 수 있습니다.
+   - 운영·Vercel 환경은 `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_JWT_SECRET`을 반드시 설정해야 합니다.
 
 ---
 

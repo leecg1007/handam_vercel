@@ -4,6 +4,9 @@ const path = require("path");
 const envPath = path.join(process.cwd(), ".env");
 const requiredKeys = [
   "FIREBASE_WEB_API_KEY",
+  "ADMIN_USERNAME",
+  "ADMIN_PASSWORD",
+  "ADMIN_JWT_SECRET",
   "CLOVA_OCR_INVOKE_URL",
   "CLOVA_OCR_SECRET",
   "GEMINI_API_KEY",

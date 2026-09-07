@@ -44,13 +44,13 @@ test("real application login, admin bridge, logout, home, settings and loading r
   await expect(page.locator("#page-login")).toHaveClass(/active/);
   await expect(page.locator("#splash-root")).toHaveCount(0, { timeout: 12000 });
   await page.locator("#login-email").fill("operator"); await page.locator("#login-password").fill("mock password");
-  await page.locator('#page-login button[onclick="login()"] ').click();
+  await page.locator("#page-login").getByRole("button", { name: "로그인", exact: true }).click();
   await expect(page.getByRole("heading", { name: "한담 관리자", exact: true })).toBeVisible(); await expect(page.locator(".device")).toBeHidden();
   await page.getByRole("button", { name: "계정 설정", exact: true }).click(); await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "로그아웃", exact: true }).click();
   await expect(page.locator("#admin-root")).toBeHidden(); await expect(page.locator(".device")).toBeVisible();
   expect(await page.locator("#admin-portals").evaluate(el => el.children.length)).toBe(0);
-  await page.locator("#login-email").fill("reader@example.test"); await page.locator("#login-password").fill("mock password"); await page.locator('#page-login button[onclick="login()"] ').click();
+  await page.locator("#login-email").fill("reader@example.test"); await page.locator("#login-password").fill("mock password"); await page.locator("#page-login").getByRole("button", { name: "로그인", exact: true }).click();
   await expect(page.locator("#page-home")).toHaveClass(/active/);
   await expect(page.locator("#home-greeting")).toContainText("테스트 독자");
   mkdirSync("output/playwright/captures", { recursive: true }); await page.screenshot({ path: "output/playwright/captures/regression-home.png" });

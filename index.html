@@ -487,22 +487,34 @@
         <h1 class="h-page" style="margin-top:12px">다시 한담을<br>시작해볼까요?</h1>
         <p class="muted" style="font-size:13px;font-weight:700;margin-top:8px">마음을 담는 하루의 기록</p>
       </div>
-      <div class="card reveal" style="--d:.07s;margin-top:12px">
-        <label class="field-label">이메일</label>
-        <input class="input" id="login-email" type="text" value="" placeholder="이메일 또는 관리자 아이디" autocomplete="username">
-        <label class="field-label" style="margin-top:14px">비밀번호</label>
-        <input class="input" id="login-password" type="password" value="" placeholder="비밀번호" autocomplete="current-password">
-        <button class="btn btn-primary" style="margin-top:16px" onclick="login()">
-          <i class="fa-solid fa-right-to-bracket"></i> 로그인
+      <form class="card reveal auth-card" id="login-form" style="--d:.07s" novalidate>
+        <div class="auth-field">
+          <label class="field-label" for="login-email">이메일 또는 관리자 아이디</label>
+          <input class="input" id="login-email" type="text" value="" placeholder="이메일 또는 관리자 아이디" autocomplete="username" aria-describedby="login-email-error">
+          <p class="field-error" id="login-email-error" role="alert" hidden></p>
+        </div>
+        <div class="auth-field">
+          <label class="field-label" for="login-password">비밀번호</label>
+          <div class="password-field">
+            <input class="input" id="login-password" type="password" value="" placeholder="비밀번호" autocomplete="current-password" aria-describedby="login-password-error">
+            <button type="button" class="password-toggle" data-password-toggle="login-password" aria-controls="login-password" aria-label="비밀번호 표시">
+              <i class="fa-solid fa-eye" aria-hidden="true"></i>
+            </button>
+          </div>
+          <p class="field-error" id="login-password-error" role="alert" hidden></p>
+        </div>
+        <p class="form-error" id="login-form-error" role="alert" hidden></p>
+        <button type="submit" class="btn btn-primary auth-submit">
+          <i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i><span data-button-label>로그인</span>
         </button>
-      </div>
-      <button class="btn btn-line reveal" style="--d:.14s;margin-top:10px" onclick="loginWithGoogle()">
-        <i class="fa-brands fa-google"></i> Google로 로그인
+      </form>
+      <button type="button" class="btn btn-line reveal auth-provider" id="google-login-button" style="--d:.14s" data-auth-action="google-login">
+        <i class="fa-brands fa-google" aria-hidden="true"></i><span data-button-label>Google로 로그인</span>
       </button>
       <div class="auth-links reveal" style="--d:.16s">
-        <button type="button" class="text-link" onclick="go('signup')">회원가입</button>
+        <button type="button" class="text-link" data-auth-go="signup">회원가입</button>
         <span class="muted">·</span>
-        <button type="button" class="text-link" onclick="go('find-account')">아이디/비밀번호 찾기</button>
+        <button type="button" class="text-link" data-auth-go="find-account">아이디/비밀번호 찾기</button>
       </div>
     </div>
   </div>
@@ -511,27 +523,51 @@
   <div id="page-signup" class="page">
     <div class="pad auth-pad">
       <div class="backbar reveal" style="--d:.02s">
-        <button class="iconbtn" onclick="go('login')"><i class="fa-solid fa-arrow-left"></i></button>
-        <h1 class="h-page">회원가입</h1>
+        <button type="button" class="iconbtn" data-auth-go="login" aria-label="로그인으로 돌아가기"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i></button>
+        <h1 class="h-page" tabindex="-1">회원가입</h1>
       </div>
-      <p class="muted reveal" style="--d:.05s;font-size:13px;font-weight:600;line-height:1.55">
+      <p class="muted reveal auth-intro" style="--d:.05s">
         이메일과 비밀번호로 가입할 수 있어요.
       </p>
-      <div class="card reveal" style="--d:.07s;margin-top:12px">
-        <label class="field-label">이름 (표시 이름)</label>
-        <input class="input" id="signup-name" type="text" placeholder="예: 한담" autocomplete="name">
-        <label class="field-label" style="margin-top:14px">이메일</label>
-        <input class="input" id="signup-email" type="email" placeholder="you@example.com" autocomplete="email">
-        <label class="field-label" style="margin-top:14px">비밀번호</label>
-        <input class="input" id="signup-password" type="password" placeholder="6자 이상" autocomplete="new-password">
-        <label class="field-label" style="margin-top:14px">비밀번호 확인</label>
-        <input class="input" id="signup-password-confirm" type="password" placeholder="한 번 더 입력" autocomplete="new-password">
-        <button class="btn btn-primary" style="margin-top:16px" onclick="registerFromSignup()">
-          <i class="fa-solid fa-user-plus"></i> 가입하기
+      <form class="card reveal auth-card" id="signup-form" style="--d:.07s" novalidate>
+        <div class="auth-field">
+          <label class="field-label" for="signup-name">이름 (표시 이름)</label>
+          <input class="input" id="signup-name" type="text" placeholder="예: 한담" autocomplete="name" maxlength="80" aria-describedby="signup-name-error">
+          <p class="field-error" id="signup-name-error" role="alert" hidden></p>
+        </div>
+        <div class="auth-field">
+          <label class="field-label" for="signup-email">이메일</label>
+          <input class="input" id="signup-email" type="email" placeholder="you@example.com" autocomplete="email" inputmode="email" aria-describedby="signup-email-error">
+          <p class="field-error" id="signup-email-error" role="alert" hidden></p>
+        </div>
+        <div class="auth-field">
+          <label class="field-label" for="signup-password">비밀번호</label>
+          <div class="password-field">
+            <input class="input" id="signup-password" type="password" placeholder="6자 이상" autocomplete="new-password" minlength="6" aria-describedby="signup-password-help signup-password-error">
+            <button type="button" class="password-toggle" data-password-toggle="signup-password" aria-controls="signup-password" aria-label="비밀번호 표시">
+              <i class="fa-solid fa-eye" aria-hidden="true"></i>
+            </button>
+          </div>
+          <p class="field-help" id="signup-password-help">영문·숫자 조합을 권장하며 6자 이상 입력해주세요.</p>
+          <p class="field-error" id="signup-password-error" role="alert" hidden></p>
+        </div>
+        <div class="auth-field">
+          <label class="field-label" for="signup-password-confirm">비밀번호 확인</label>
+          <div class="password-field">
+            <input class="input" id="signup-password-confirm" type="password" placeholder="한 번 더 입력" autocomplete="new-password" minlength="6" aria-describedby="signup-password-confirm-error">
+            <button type="button" class="password-toggle" data-password-toggle="signup-password-confirm" aria-controls="signup-password-confirm" aria-label="비밀번호 확인 표시">
+              <i class="fa-solid fa-eye" aria-hidden="true"></i>
+            </button>
+          </div>
+          <p class="field-error" id="signup-password-confirm-error" role="alert" hidden></p>
+        </div>
+        <p class="form-error" id="signup-form-error" role="alert" hidden></p>
+        <button type="submit" class="btn btn-primary auth-submit">
+          <i class="fa-solid fa-user-plus" aria-hidden="true"></i><span data-button-label>가입하기</span>
         </button>
-      </div>
+      </form>
       <div class="auth-links reveal" style="--d:.14s">
-        <button type="button" class="text-link" onclick="go('login')">이미 계정이 있어요</button>
+        <button type="button" class="text-link" data-auth-go="login">이미 계정이 있어요</button>
       </div>
     </div>
   </div>
@@ -540,41 +576,47 @@
   <div id="page-find-account" class="page">
     <div class="pad auth-pad">
       <div class="backbar reveal" style="--d:.02s">
-        <button class="iconbtn" onclick="go('login')"><i class="fa-solid fa-arrow-left"></i></button>
-        <h1 class="h-page">계정 찾기</h1>
+        <button type="button" class="iconbtn" data-auth-go="login" aria-label="로그인으로 돌아가기"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i></button>
+        <h1 class="h-page" tabindex="-1">계정 찾기</h1>
       </div>
-      <div class="seg reveal" style="--d:.06s;margin-top:10px" id="find-tabs">
-        <button type="button" class="on" data-find-tab="password">비밀번호 찾기</button>
-        <button type="button" data-find-tab="id">아이디 확인</button>
+      <div class="seg reveal auth-tabs" style="--d:.06s" id="find-tabs" role="tablist" aria-label="계정 찾기 방식">
+        <button type="button" class="on" id="find-tab-password" data-find-tab="password" role="tab" aria-selected="true" aria-controls="find-panel-password" tabindex="0">비밀번호 찾기</button>
+        <button type="button" id="find-tab-id" data-find-tab="id" role="tab" aria-selected="false" aria-controls="find-panel-id" tabindex="-1">아이디 확인</button>
       </div>
-      <div id="find-panel-password" class="reveal" style="--d:.1s;margin-top:14px">
-        <div class="card">
-          <label class="field-label">가입 이메일</label>
-          <input class="input" id="find-email" type="email" placeholder="가입 시 사용한 이메일">
-          <p class="muted" style="font-size:12px;font-weight:600;line-height:1.55;margin-top:12px">
-            Firebase 기본 메일(<b>noreply@…firebaseapp.com</b>)로 발송돼요. 스팸함에 들어갈 수 있습니다.
+      <div id="find-panel-password" class="reveal auth-panel" style="--d:.1s" role="tabpanel" aria-labelledby="find-tab-password">
+        <form id="password-reset-form" novalidate>
+          <div class="card auth-card">
+            <div class="auth-field">
+              <label class="field-label" for="find-email">가입 이메일</label>
+              <input class="input" id="find-email" type="email" placeholder="가입 시 사용한 이메일" autocomplete="email" inputmode="email" aria-describedby="find-email-help find-email-error">
+              <p class="field-help" id="find-email-help">등록된 계정이 있다면 비밀번호 재설정 링크를 보내드려요. 보안을 위해 가입 여부와 관계없이 같은 안내를 표시합니다.</p>
+              <p class="field-error" id="find-email-error" role="alert" hidden></p>
+            </div>
+          </div>
+          <p class="form-error" id="password-reset-form-error" role="alert" hidden></p>
+          <button type="submit" class="btn btn-primary auth-panel-submit" id="password-reset-submit">
+            <i class="fa-solid fa-envelope" aria-hidden="true"></i><span data-button-label>재설정 메일 보내기</span>
+          </button>
+          <div id="find-reset-result" class="find-hint" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+        </form>
+      </div>
+      <div id="find-panel-id" class="reveal auth-panel" style="--d:.1s" role="tabpanel" aria-labelledby="find-tab-id" hidden>
+        <div class="card auth-card">
+          <p class="field-label">이 기기에서 사용한 계정</p>
+          <p class="field-help auth-account-copy">
+            로그인할 때 저장한 마스킹 정보만 보여드려요. 이메일 원문과 인증 토큰은 저장하지 않습니다.
           </p>
         </div>
-        <button class="btn btn-primary" style="margin-top:16px" onclick="sendPasswordReset()">
-          <i class="fa-solid fa-envelope"></i> 재설정 메일 보내기
+        <button type="button" class="btn btn-primary auth-panel-submit" data-auth-action="show-account-hints">
+          <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i><span>최근 계정 보기</span>
         </button>
-        <p id="find-reset-result" class="find-hint" style="display:none;margin-top:14px"></p>
-      </div>
-      <div id="find-panel-id" class="reveal" style="--d:.1s;margin-top:14px;display:none">
-        <div class="card">
-          <label class="field-label">이메일 일부 입력</label>
-          <input class="input" id="find-id-email" type="text" placeholder="예: han 또는 @gmail">
-          <p class="muted" style="font-size:12px;font-weight:600;line-height:1.55;margin-top:12px">
-            이 기기에 로그인 기록이 있으면 마스킹된 이메일을 보여드려요.
-          </p>
+        <div id="find-id-result" class="find-hint" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+        <div class="auth-account-actions">
+          <button type="button" class="text-link" id="find-id-clear" data-auth-action="clear-account-hints" hidden>이 기기의 계정 기록 지우기</button>
         </div>
-        <button class="btn btn-primary" style="margin-top:16px" onclick="showFindHint()">
-          <i class="fa-solid fa-magnifying-glass"></i> 확인하기
-        </button>
-        <p id="find-id-result" class="find-hint" style="display:none"></p>
       </div>
       <div class="auth-links reveal" style="--d:.16s">
-        <button type="button" class="text-link" onclick="go('login')">로그인으로 돌아가기</button>
+        <button type="button" class="text-link" data-auth-go="login">로그인으로 돌아가기</button>
       </div>
     </div>
   </div>
@@ -597,10 +639,10 @@
   </nav>
 
   <!-- Bottom sheet: birthday -->
-  <div class="scrim" id="scrim" onclick="closeSheet()"></div>
-  <div class="sheet" id="sheet">
+  <div class="scrim" id="scrim" data-sheet-dismiss aria-hidden="true"></div>
+  <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" aria-hidden="true" inert>
     <div class="grabber"></div>
-    <h2 style="font-size:18px;font-weight:800">생년월일 입력</h2>
+    <h2 id="sheet-title" style="font-size:18px;font-weight:800">생년월일 입력</h2>
     <p class="muted" style="font-size:13px;font-weight:600;margin-top:6px">
       생년월일과 별자리로 오늘의 운세 점수를 계산해요.
     </p>
