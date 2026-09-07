@@ -290,7 +290,7 @@
   <!-- ============ SETTINGS ============ -->
   <div id="page-settings" class="page">
     <div class="pad">
-      <div class="settings-heading reveal"><h1 class="h-page">내 정보</h1></div>
+      <div class="settings-heading reveal"><h1 class="h-page">설정</h1></div>
 
       <div class="card settings-profile reveal">
         <div class="avatar" id="settings-avatar" aria-hidden="true">한</div>
@@ -301,16 +301,12 @@
       </div>
 
       <section class="settings-section settings-preferences reveal" aria-labelledby="settings-screen-label">
-        <h2 class="group-label" id="settings-screen-label">화면 · 알림</h2>
+        <h2 class="group-label" id="settings-screen-label">화면</h2>
         <div class="list">
           <button type="button" class="list-item settings-action" id="dark-switch" role="switch" aria-checked="false" data-settings-action="theme">
             <span class="lead"><i class="fa-solid fa-moon" aria-hidden="true"></i> 다크 모드</span>
             <span class="switch" aria-hidden="true"></span>
           </button>
-          <div class="list-item settings-unavailable" aria-disabled="true">
-            <span class="lead"><i class="fa-solid fa-bell" aria-hidden="true"></i> 기록 알림</span>
-            <span class="settings-coming-soon" id="record-reminder-switch">준비 중</span>
-          </div>
         </div>
       </section>
 
@@ -318,16 +314,17 @@
         <h2 class="group-label" id="settings-ai-label">AI 서비스 설정</h2>
         <div class="list">
           <div class="list-item settings-choice">
-            <div class="lead" id="settings-quality-label"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i> 요약 정확도</div>
-            <p class="settings-help" id="settings-quality-help">선택한 수준을 다음 AI 요약에 반영해요.</p>
-            <div class="seg seg-elastic" role="radiogroup" aria-labelledby="settings-quality-label" aria-describedby="settings-quality-help" data-setting-segment="summaryQuality">
-              <button type="button" role="radio" aria-checked="false" tabindex="-1" data-value="표준">표준</button><button type="button" role="radio" aria-checked="true" tabindex="0" class="on" data-value="고급">고급</button><button type="button" role="radio" aria-checked="false" tabindex="-1" data-value="최고">최고</button>
+            <div class="lead" id="settings-quality-label"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i> 요약 방식</div>
+            <p class="settings-help" id="settings-quality-help">균형 · 원문의 흐름과 핵심을 고르게 살려요.</p>
+            <div class="seg seg-elastic" role="radiogroup" aria-labelledby="settings-quality-label" aria-describedby="settings-quality-help" data-setting-segment="summaryQuality" data-setting-help="settings-quality-help">
+              <button type="button" role="radio" aria-checked="false" tabindex="-1" data-value="표준" data-description="간결 · 핵심 사건과 감정을 짧고 직접적으로 정리해요.">간결</button><button type="button" role="radio" aria-checked="true" tabindex="0" class="on" data-value="고급" data-description="균형 · 원문의 흐름과 핵심을 고르게 살려요.">균형</button><button type="button" role="radio" aria-checked="false" tabindex="-1" data-value="최고" data-description="섬세 · 중요한 세부와 감정의 뉘앙스를 더 충실히 담아요.">섬세</button>
             </div>
           </div>
           <div class="list-item settings-choice">
             <div class="lead" id="settings-persona-label"><i class="fa-solid fa-comment-dots" aria-hidden="true"></i> AI 페르소나</div>
-            <div class="seg seg-elastic" role="radiogroup" aria-labelledby="settings-persona-label" data-setting-segment="persona">
-              <button type="button" role="radio" aria-checked="true" tabindex="0" class="on" data-value="따뜻한 공감형">따뜻한 공감형</button><button type="button" role="radio" aria-checked="false" tabindex="-1" data-value="담백한 정리형">담백한 정리형</button>
+            <p class="settings-help" id="settings-persona-help">따뜻한 공감형 · 감정을 헤아리는 말투로 정리해요.</p>
+            <div class="seg seg-elastic" role="radiogroup" aria-labelledby="settings-persona-label" aria-describedby="settings-persona-help" data-setting-segment="persona" data-setting-help="settings-persona-help">
+              <button type="button" role="radio" aria-checked="true" tabindex="0" class="on" data-value="따뜻한 공감형" data-description="따뜻한 공감형 · 감정을 헤아리는 말투로 정리해요.">따뜻한 공감형</button><button type="button" role="radio" aria-checked="false" tabindex="-1" data-value="담백한 정리형" data-description="담백한 정리형 · 핵심을 차분하고 간결하게 정리해요.">담백한 정리형</button>
             </div>
           </div>
         </div>
@@ -350,7 +347,7 @@
         </div>
       </section>
       <p class="settings-footer muted reveal">
-        한담 v1.0.0 · 설정은 이 기기에 먼저 적용하고 계정에 동기화해요.
+        한담 v1.0.0 · 변경 사항은 자동으로 동기화돼요.
       </p>
     </div>
   </div>
@@ -583,19 +580,19 @@
   </div>
 
   <!-- Bottom nav -->
-  <nav class="bottom-nav">
-    <button class="nav-item active" data-page="home" onclick="go('home')">
-      <i class="fa-solid fa-house"></i><span>홈</span>
+  <nav class="bottom-nav" aria-label="주요 메뉴">
+    <button type="button" class="nav-item active" data-page="home" aria-current="page" onclick="go('home')">
+      <i class="fa-solid fa-house" aria-hidden="true"></i><span>홈</span>
     </button>
-    <button class="nav-item" data-page="fortune" onclick="go('fortune')">
-      <i class="fa-solid fa-sun"></i><span>운세</span>
+    <button type="button" class="nav-item" data-page="fortune" onclick="go('fortune')">
+      <i class="fa-solid fa-sun" aria-hidden="true"></i><span>운세</span>
     </button>
-    <button class="fab" onclick="go('diary')"><i class="fa-solid fa-feather-pointed"></i></button>
-    <button class="nav-item" data-page="prompts" onclick="go('prompts')">
-      <i class="fa-solid fa-lightbulb"></i><span>글감</span>
+    <button type="button" class="fab" aria-label="새 일기 작성" onclick="go('diary')"><i class="fa-solid fa-feather-pointed" aria-hidden="true"></i><span class="fab-label" aria-hidden="true">기록</span></button>
+    <button type="button" class="nav-item" data-page="prompts" onclick="go('prompts')">
+      <i class="fa-solid fa-lightbulb" aria-hidden="true"></i><span>글감</span>
     </button>
-    <button class="nav-item" data-page="settings" onclick="go('settings')">
-      <i class="fa-solid fa-user"></i><span>내 정보</span>
+    <button type="button" class="nav-item" data-page="settings" onclick="go('settings')">
+      <i class="fa-solid fa-gear" aria-hidden="true"></i><span>설정</span>
     </button>
   </nav>
 

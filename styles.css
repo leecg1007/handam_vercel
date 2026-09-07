@@ -570,12 +570,15 @@ input,textarea,select{font-size:16px}
 #page-settings .settings-action > .fa-chevron-right{font-size:12px}
 #page-settings .settings-choice{flex-direction:column;align-items:stretch;gap:10px}
 .settings-help{font-size:12px;line-height:1.6;color:var(--text-muted)}
-.settings-coming-soon{flex:none;font-size:12px;font-weight:700;color:var(--text-muted)}
-.settings-unavailable{cursor:default}
 #page-settings .settings-logout,
 #page-settings .settings-logout .lead i{color:var(--settings-danger)}
-#page-settings .seg button{min-height:44px;min-width:0;padding:8px 5px;line-height:1.5;font-size:13px}
-#page-settings .seg button[aria-checked="true"]{text-decoration:underline;text-underline-offset:4px}
+#page-settings .seg{background:transparent;border-radius:0;padding:0;gap:6px}
+#page-settings .seg-pill{display:none}
+#page-settings .seg button{
+  min-height:44px;min-width:0;padding:8px 5px;line-height:1.5;font-size:13px;
+  border-radius:0;border-bottom:2px solid transparent;
+}
+#page-settings .seg button[aria-checked="true"]{border-bottom-color:var(--accent)}
 #page-settings :focus-visible{outline:2px solid var(--accent);outline-offset:-4px}
 #dark-switch[aria-checked="true"] .switch{background:var(--accent)}
 #dark-switch[aria-checked="true"] .switch::after{left:21px}
@@ -673,7 +676,11 @@ input,textarea,select{font-size:16px}
   box-shadow:0 14px 28px -8px rgba(198,106,56,.75),0 0 0 1px rgba(255,255,255,.2) inset;
   transition:transform .2s var(--ease-spring),box-shadow .2s ease;
   animation:fab-pulse var(--anim-deco-fab-pulse) ease-in-out infinite;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  font-family:inherit;
 }
+.fab i{font-size:17px;line-height:1}
+.fab-label{font-size:9px;line-height:1.2;font-weight:800;letter-spacing:-.01em}
 .fab.press-spring:active{
   transform:translateY(3px) scale(.94);
   animation:none;

@@ -191,6 +191,9 @@ function applyUserSettings(settings, { applyFortune = true } = {}) {
         button.tabIndex = selected ? 0 : -1;
       }
     });
+    const selected = segment.querySelector('button[aria-checked="true"]');
+    const help = document.getElementById(segment.dataset.settingHelp || "");
+    if (selected?.dataset.description && help) help.textContent = selected.dataset.description;
   });
   if (applyFortune) {
     state.fortuneBirthday = next.fortuneBirthday || null;
@@ -904,7 +907,12 @@ function go(id) {
   const target = document.getElementById("page-" + id);
   if (!target) return;
   document.querySelectorAll(".page").forEach((p) => p.classList.toggle("active", p === target));
-  document.querySelectorAll(".nav-item").forEach((n) => n.classList.toggle("active", n.dataset.page === id));
+  document.querySelectorAll(".nav-item").forEach((n) => {
+    const active = n.dataset.page === id;
+    n.classList.toggle("active", active);
+    if (active) n.setAttribute("aria-current", "page");
+    else n.removeAttribute("aria-current");
+  });
   document.querySelector(".device")?.classList.toggle("auth-mode", AUTH_PAGES.has(id));
   target.scrollTop = 0;
   replayRevealAnimations(target);

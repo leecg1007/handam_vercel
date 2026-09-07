@@ -3,6 +3,11 @@ const { resolvePersona } = require("./personas");
 
 const GEMINI_MODEL_PATTERN = /^[a-zA-Z0-9._-]{1,100}$/;
 const SUMMARY_QUALITIES = new Set(["표준", "고급", "최고"]);
+const SUMMARY_QUALITY_INSTRUCTIONS = Object.freeze({
+  표준: "핵심 사건과 감정을 짧고 직접적인 한 문장으로 정리하세요.",
+  고급: "핵심 사건과 감정의 맥락을 균형 있게 담은 자연스러운 한 문장으로 정리하세요.",
+  최고: "중요한 세부와 감정의 뉘앙스를 놓치지 않되 명료한 한 문장으로 정리하세요.",
+});
 
 function getGeminiModel() {
   const configured = String(process.env.GEMINI_MODEL || "gemini-2.5-flash").trim();
@@ -86,6 +91,7 @@ async function handleSummarize(res, body) {
   const text = String(body.text || "").trim();
   const persona = resolvePersona(String(body.persona || ""));
   const quality = SUMMARY_QUALITIES.has(body.quality) ? body.quality : "고급";
+  const qualityInstruction = SUMMARY_QUALITY_INSTRUCTIONS[quality];
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return sendJson(res, 500, { error: "Missing GEMINI_API_KEY in env" });
   if (!text) return sendJson(res, 400, { error: "text is required" });
@@ -95,7 +101,8 @@ async function handleSummarize(res, body) {
     "당신은 한국어 일기 도우미입니다.",
     `페르소나: ${persona.name}`,
     `행동 지침: ${persona.instruction}`,
-    `요약 정확도: ${quality}`,
+    `요약 방식: ${quality}`,
+    `요약 방식 지침: ${qualityInstruction}`,
     "원문의 개인정보나 민감한 내용을 새로 추측하거나 만들어내지 마세요.",
     "입력 텍스트를 맞춤법/문장 부호를 자연스럽게 정리하고, 핵심을 한 줄로 요약하세요.",
     "JSON만 반환하세요. 형식: {\"cleanedText\":\"...\",\"summary\":\"...\"}",

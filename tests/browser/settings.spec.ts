@@ -59,8 +59,15 @@ for (const width of [360, 390, 768]) for (const theme of ["light", "dark"]) {
     await page.setViewportSize({ width, height: 844 });
     await setup(page, theme, width === 360);
     const settings = page.locator("#page-settings");
+    await expect(settings.getByRole("heading", { name: "설정", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "설정", exact: true })).toHaveAttribute("aria-current", "page");
+    await expect(page.getByRole("button", { name: "새 일기 작성", exact: true })).toBeVisible();
+    await expect(page.locator(".fab-label")).toHaveText("기록");
     await expect(settings.getByText("한담 PRO")).toHaveCount(0);
-    await expect(settings.getByText("준비 중", { exact: true })).toBeVisible();
+    await expect(settings.getByText("기록 알림", { exact: true })).toHaveCount(0);
+    await expect(settings.getByText("준비 중", { exact: true })).toHaveCount(0);
+    await expect(settings.getByText("요금제에 따라 달라요", { exact: true })).toHaveCount(0);
+    await expect(settings.locator(".seg-pill").first()).toBeHidden();
     await expect(settings.locator("[onclick]")).toHaveCount(0);
     for (const button of await settings.locator("button").all()) {
       expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
@@ -105,15 +112,17 @@ test("settings keyboard controls, navigation and existing preference contract", 
   await page.keyboard.press("Enter");
   await expect(toggle).toHaveAttribute("aria-checked", "false");
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("radio", { name: "고급", exact: true })).toBeFocused();
+  await expect(page.getByRole("radio", { name: "균형", exact: true })).toBeFocused();
   await page.keyboard.press("ArrowRight");
-  await expect(page.getByRole("radio", { name: "최고", exact: true })).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("radio", { name: "섬세", exact: true })).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("#settings-quality-help")).toContainText("감정의 뉘앙스");
   await page.keyboard.press("Home");
-  await expect(page.getByRole("radio", { name: "표준", exact: true })).toBeFocused();
+  await expect(page.getByRole("radio", { name: "간결", exact: true })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("radio", { name: "따뜻한 공감형" })).toBeFocused();
   await page.keyboard.press("ArrowLeft");
   await expect(page.getByRole("radio", { name: "담백한 정리형" })).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("#settings-persona-help")).toContainText("차분하고 간결하게");
   await expect.poll(() => model.settings.persona).toBe("담백한 정리형");
   expect(model.settings).toMatchObject({ theme: "light", recordReminder: true, summaryQuality: "표준", lunarCalendar: false, fortuneBirthday: "" });
   for (const group of await page.getByRole("radiogroup").all()) {
@@ -137,7 +146,7 @@ test("settings report pending sync, failure and recovery without losing local ch
   const model = await setup(page);
   model.delay = 350;
   model.fail = true;
-  const choice = page.getByRole("radio", { name: "최고", exact: true });
+  const choice = page.getByRole("radio", { name: "섬세", exact: true });
   await choice.click();
   await expect(choice).toHaveAttribute("aria-checked", "true");
   const toast = page.locator("#toast");
