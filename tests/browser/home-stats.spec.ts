@@ -69,6 +69,39 @@ async function setup(page: Page, fixture = buildRecords()) {
   await expect(page.locator("#splash-root")).toHaveCount(0, { timeout: 5000 });
 }
 
+test("prompt refresh keeps analysis steady and releases finished animations", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page);
+  await page.locator('.bottom-nav [data-page="prompts"]').click();
+  await page.locator('#page-prompts').evaluate(async element => {
+    await Promise.all(element.getAnimations({subtree:true}).map(animation => animation.finished.catch(() => {})));
+  });
+  const meta = page.locator('#prompt-meta');
+  const before = await meta.textContent();
+  const refresh = page.locator('#prompt-refresh-btn');
+  await refresh.click();
+  await expect(refresh).toBeDisabled();
+  const samples = await meta.evaluate(async element => {
+    const samples = [];
+    for (let i = 0; i < 25; i++) {
+      const style = getComputedStyle(element);
+      samples.push({ opacity: Number(style.opacity), filter: style.filter, top: element.getBoundingClientRect().top });
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return samples;
+  });
+  console.log('Prompt analysis motion', JSON.stringify({minOpacity:Math.min(...samples.map(s=>s.opacity)), maxDrift:Math.max(...samples.map(s=>s.top))-Math.min(...samples.map(s=>s.top))}));
+  await expect(refresh).toBeEnabled();
+  await expect(meta).toHaveText(before!);
+  expect(Math.min(...samples.map(s => s.opacity))).toBe(1);
+  expect(Math.max(...samples.map(s => s.top)) - Math.min(...samples.map(s => s.top))).toBeLessThan(1);
+  for (let i = 0; i < 2; i++) {
+    await refresh.click();
+    await expect(refresh).toBeEnabled();
+  }
+  expect(await page.locator('.prompt-slot').evaluateAll(cards => cards.reduce((sum, card) => sum + card.getAnimations({subtree:true}).filter(a=>a instanceof Animation && a.effect instanceof KeyframeEffect && !('animationName' in a)).length, 0))).toBe(0);
+});
+
 test("weekly sheet and all-record statistics preserve the complete home flow", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const reference = new Date();
@@ -86,6 +119,12 @@ test("weekly sheet and all-record statistics preserve the complete home flow", a
   await expect(page.locator("#week-stats-days-written")).toHaveText(`${currentWeekDays}일`);
   await expect(page.locator("#week-stats-next")).toBeDisabled();
   await expect(page.locator("#week-stats-records")).toBeVisible();
+  await expect.poll(() => sheet.evaluate(element => Math.abs(new DOMMatrixReadOnly(getComputedStyle(element).transform).m42))).toBe(0);
+  const corners = await sheet.evaluate(element => {
+    const style = getComputedStyle(element);
+    return [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomLeftRadius, style.borderBottomRightRadius];
+  });
+  expect(corners).toEqual(['28px', '28px', '28px', '28px']);
   const actionsBox = await page.locator(".week-stats-actions").boundingBox();
   const navBox = await page.locator(".bottom-nav").boundingBox();
   expect(actionsBox!.y + actionsBox!.height).toBeLessThanOrEqual(navBox!.y);

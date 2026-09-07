@@ -1420,7 +1420,8 @@ function renderPromptRecommendations() {
     card.querySelector("p").textContent = prompt.desc;
   });
   const meta = document.getElementById("prompt-meta");
-  if (meta) meta.innerHTML = formatPromptMeta(analysis);
+  const metaHtml = formatPromptMeta(analysis);
+  if (meta && meta.innerHTML !== metaHtml) meta.innerHTML = metaHtml;
   const homePrompt = document.getElementById("home-prompt-teaser");
   if (homePrompt && picks[0]) {
     const top = picks[0];

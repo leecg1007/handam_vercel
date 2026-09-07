@@ -772,6 +772,7 @@ input,textarea,select{font-size:16px}
   transition:transform var(--anim-sheet-panel-duration) var(--ease-sheet),visibility 0s linear 0s;
 }
 .week-stats-sheet{
+  border-radius:28px;
   bottom:calc(84px + env(safe-area-inset-bottom));
   height:min(650px,calc(100% - 112px - env(safe-area-inset-bottom)));
   max-height:none;
