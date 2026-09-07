@@ -3,6 +3,8 @@ import { getAnalytics, isSupported as analyticsSupported } from "https://www.gst
 import { initInteractions, refreshInteractions } from "./interactions.js";
 import { initElasticSegments, refreshElasticSegments } from "./segment-control.js";
 import { animatePromptRefresh } from "./prompt-animations.js";
+import { getWeekStart, getWeekStripDates, shiftWeek } from "./week-calendar.js";
+import { calculateCurrentStreak, calculateDiaryStats } from "./diary-stats.js";
 import {
   deepMerge,
   DEFAULT_ANIMATIONS,
@@ -68,6 +70,8 @@ const state = {
   fortuneBirthday: null,
   fortune: null,
   selectedPrompt: "",
+  weekStatsReference: null,
+  recordDetailReturnPage: "records",
   settings: null,
   recordsSource: "none",
 };
@@ -612,22 +616,6 @@ function toDateKey(date) {
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
-/** 오늘 포함 최근 7일, 표시 순서는 월→일(각 칸 요일 라벨과 날짜 일치) */
-function getWeekStripDates(reference = new Date()) {
-  const end = new Date(reference);
-  end.setHours(0, 0, 0, 0);
-  const dates = Array.from({ length: 7 }, (_, i) => {
-    const day = new Date(end);
-    day.setDate(end.getDate() - (6 - i));
-    return day;
-  });
-  dates.sort((a, b) => {
-    const wa = a.getDay() === 0 ? 7 : a.getDay();
-    const wb = b.getDay() === 0 ? 7 : b.getDay();
-    return wa - wb;
-  });
-  return dates;
-}
 const WEEK_STRIP_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
 let lastHomeDiaryDateKey = diaryEntryDate();
 function moodToEmoji(mood) {
@@ -637,27 +625,73 @@ function moodToEmoji(mood) {
   if (leading) return leading;
   return "📝";
 }
-function computeWritingStreak(records) {
-  const dates = new Set(records.map(recordDateKey).filter(Boolean));
-  if (!dates.size) return 0;
-  let streak = 0;
-  const cursor = new Date();
-  cursor.setHours(0, 0, 0, 0);
-  while (dates.has(toDateKey(cursor))) {
-    streak += 1;
-    cursor.setDate(cursor.getDate() - 1);
+const MOOD_COLORS = Object.freeze({
+  행복: "#E9B958", 평온: "#94A873", 설렘: "#DF907C", 차분: "#82A8A0", 지침: "#A99B8D",
+  감사: "#CDA66B", 슬픔: "#7694B3", 분노: "#CE6E57", 불안: "#B18AB7", 자신: "#D18B49",
+});
+const MOOD_ADJECTIVES = Object.freeze({
+  행복: "행복한", 평온: "평온한", 설렘: "설레는", 차분: "차분한", 지침: "지친", 감사: "감사한",
+  슬픔: "슬픈", 분노: "화난", 불안: "불안한", 자신: "자신감 있는",
+});
+function statsEntries(records = state.records) {
+  return records.map((record) => ({
+    dateKey: recordDateKey(record),
+    mood: parseMoodLabel(record.mood),
+    createdAt: record.createdAt,
+  }));
+}
+function insightForStats(stats, scope = "전체") {
+  if (!stats.recordCount) {
+    return scope === "주간"
+      ? ["마음 기록을 기다리고 있어요", "이번 주의 첫 마음을 남겨보세요."]
+      : ["첫 마음을 기다리고 있어요", "오늘의 작은 마음부터 천천히 남겨보세요."];
   }
-  return streak;
+  const adjective = MOOD_ADJECTIVES[stats.dominantMood] || `${stats.dominantMood}한`;
+  return scope === "주간"
+    ? [`${adjective} 마음이 가장 많이 머물렀어요`, "이번 주의 마음을 천천히 돌아보세요."]
+    : [`${adjective} 마음이 가장 많이 머물렀어요`, "차곡차곡 쌓인 기록이 지금의 마음을 보여줘요."];
+}
+function renderMoodDistribution(bar, legend, distribution, limit = 6) {
+  if (!bar || !legend) return;
+  const visible = distribution.slice(0, limit);
+  if (!visible.length) {
+    bar.innerHTML = '<span class="mood-distribution-empty"></span>';
+    bar.setAttribute("aria-label", "감정 기록 없음");
+    legend.innerHTML = '<span class="muted">아직 감정 기록이 없어요</span>';
+    return;
+  }
+  bar.innerHTML = visible.map((item) => {
+    const color = MOOD_COLORS[item.mood] || "#B8A895";
+    return `<span style="--mood-width:${item.percentage};--mood-color:${color}" title="${escapeHtml(item.mood)} ${item.percentage}%"></span>`;
+  }).join("");
+  bar.setAttribute("aria-label", visible.map((item) => `${item.mood} ${item.percentage}%`).join(", "));
+  legend.innerHTML = visible.map((item) => {
+    const color = MOOD_COLORS[item.mood] || "#B8A895";
+    return `<span><i style="--mood-color:${color}"></i>${escapeHtml(item.mood)} ${item.percentage}%</span>`;
+  }).join("");
+}
+function computeWritingStreak(records) {
+  return calculateCurrentStreak(records.map(recordDateKey).filter(Boolean), diaryEntryDate());
 }
 function bindHomeWeekStrip() {
   const strip = document.getElementById("home-weekstrip");
-  if (!strip || strip.dataset.bound === "1") return;
+  const card = document.getElementById("home-week-card");
+  if (!strip || !card || strip.dataset.bound === "1") return;
   strip.dataset.bound = "1";
   strip.addEventListener("click", (e) => {
     const day = e.target.closest(".day");
     if (!day) return;
     const dot = day.querySelector(".dot");
-    if (dot?.classList.contains("dot-add")) go("diary");
+    if (dot?.classList.contains("dot-add")) {
+      e.stopPropagation();
+      go("diary");
+    }
+  });
+  card.addEventListener("click", () => openWeekStatsSheet(card));
+  card.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openWeekStatsSheet(card);
   });
 }
 function refreshHomeIfDateChanged() {
@@ -665,6 +699,10 @@ function refreshHomeIfDateChanged() {
   if (todayKey === lastHomeDiaryDateKey) return;
   lastHomeDiaryDateKey = todayKey;
   updateUserUI();
+  if (document.getElementById("week-stats-sheet")?.classList.contains("show")) {
+    state.weekStatsReference = getWeekStart(new Date());
+    renderWeekStatsSheet();
+  }
   if (currentPageId() === "fortune" && fortuneData && state.fortuneBirthday) {
     refreshFortune();
     renderFortuneUI();
@@ -723,6 +761,137 @@ function updateHomeWeekDiary() {
     return;
   }
   summaryEl.textContent = `${daysWritten}일 기록 · ${streak}일 연속${streak >= 3 ? " 🔥" : ""}`;
+}
+let weekStatsReturnFocus = null;
+function formatWeekRange(dates) {
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  return `${first.getMonth() + 1}.${first.getDate()} 월 — ${last.getMonth() + 1}.${last.getDate()} 일`;
+}
+function earliestRecordWeekKey() {
+  const keys = state.records.map(recordDateKey).filter(Boolean).sort();
+  if (!keys.length) return "";
+  const [year, month, day] = keys[0].split("-").map(Number);
+  return toDateKey(getWeekStart(new Date(year, month - 1, day, 12)));
+}
+function recordsForWeek(reference) {
+  const keys = new Set(getWeekStripDates(reference).map(toDateKey));
+  return state.records.filter((record) => keys.has(recordDateKey(record)));
+}
+function renderWeekStatsSheet() {
+  const reference = state.weekStatsReference || getWeekStart(new Date());
+  const dates = getWeekStripDates(reference);
+  const records = recordsForWeek(reference);
+  const stats = calculateDiaryStats(statsEntries(records));
+  const currentWeekKey = toDateKey(getWeekStart(new Date()));
+  const selectedWeekKey = toDateKey(dates[0]);
+  const earliestWeekKey = earliestRecordWeekKey();
+  const range = formatWeekRange(dates);
+  const latestByDate = {};
+
+  for (const record of records) {
+    const key = recordDateKey(record);
+    if (!latestByDate[key] || String(record.createdAt || "") > String(latestByDate[key].createdAt || "")) latestByDate[key] = record;
+  }
+
+  document.getElementById("week-stats-range").textContent = range;
+  document.getElementById("week-stats-range-compact").textContent = range;
+  const days = document.getElementById("week-stats-days");
+  days.innerHTML = dates.map((date, index) => {
+    const key = toDateKey(date);
+    const record = latestByDate[key];
+    const isToday = key === diaryEntryDate();
+    const mood = record ? parseMoodLabel(record.mood) : "";
+    return `<div class="week-stats-day${isToday ? " is-today" : ""}">
+      <span>${WEEK_STRIP_LABELS[index]}</span><b>${date.getDate()}</b>
+      <i aria-hidden="true">${record ? moodToEmoji(record.mood) : "–"}</i>
+      <small>${escapeHtml(mood)}</small>
+    </div>`;
+  }).join("");
+
+  const [title, copy] = insightForStats(stats, "주간");
+  document.getElementById("week-stats-insight-title").textContent = title;
+  document.getElementById("week-stats-insight-copy").textContent = copy;
+  document.getElementById("week-stats-days-written").textContent = `${stats.daysWritten}일`;
+  document.getElementById("week-stats-current-streak").textContent = `${computeWritingStreak(state.records)}일`;
+  renderMoodDistribution(
+    document.getElementById("week-stats-distribution-bar"),
+    document.getElementById("week-stats-distribution-legend"),
+    stats.distribution
+  );
+  document.getElementById("week-stats-content").hidden = stats.recordCount === 0;
+  document.getElementById("week-stats-empty").hidden = stats.recordCount !== 0;
+
+  const prev = document.getElementById("week-stats-prev");
+  const next = document.getElementById("week-stats-next");
+  prev.disabled = !earliestWeekKey || selectedWeekKey <= earliestWeekKey;
+  next.disabled = selectedWeekKey >= currentWeekKey;
+  prev.setAttribute("aria-label", `${formatWeekRange(getWeekStripDates(shiftWeek(reference, -1)))} 보기`);
+  next.setAttribute("aria-label", `${formatWeekRange(getWeekStripDates(shiftWeek(reference, 1)))} 보기`);
+}
+function openWeekStatsSheet(trigger = document.getElementById("home-week-card")) {
+  if (document.getElementById("sheet")?.classList.contains("show")) closeSheet({ restoreFocus: false });
+  const scrim = document.getElementById("week-stats-scrim");
+  const sheet = document.getElementById("week-stats-sheet");
+  weekStatsReturnFocus = trigger instanceof HTMLElement ? trigger : document.activeElement;
+  state.weekStatsReference = getWeekStart(new Date());
+  renderWeekStatsSheet();
+  sheet.removeAttribute("inert");
+  sheet.setAttribute("aria-hidden", "false");
+  scrim.setAttribute("aria-hidden", "false");
+  scrim.classList.add("show");
+  sheet.classList.add("show");
+  document.getElementById("home-week-card")?.setAttribute("aria-expanded", "true");
+  document.body.classList.add("is-week-stats-open");
+  requestAnimationFrame(() => document.getElementById("week-stats-close")?.focus({ preventScroll: true }));
+}
+function closeWeekStatsSheet({ restoreFocus = true } = {}) {
+  const scrim = document.getElementById("week-stats-scrim");
+  const sheet = document.getElementById("week-stats-sheet");
+  if (!sheet?.classList.contains("show")) return;
+  scrim.classList.remove("show");
+  sheet.classList.remove("show");
+  sheet.setAttribute("aria-hidden", "true");
+  sheet.setAttribute("inert", "");
+  scrim.setAttribute("aria-hidden", "true");
+  document.getElementById("home-week-card")?.setAttribute("aria-expanded", "false");
+  document.body.classList.remove("is-week-stats-open");
+  if (restoreFocus && weekStatsReturnFocus?.isConnected) weekStatsReturnFocus.focus({ preventScroll: true });
+  weekStatsReturnFocus = null;
+}
+function moveWeekStats(amount) {
+  state.weekStatsReference = shiftWeek(state.weekStatsReference || new Date(), amount);
+  renderWeekStatsSheet();
+}
+function bindWeekStatsSheet() {
+  document.getElementById("week-stats-scrim")?.addEventListener("click", () => closeWeekStatsSheet());
+  document.getElementById("week-stats-close")?.addEventListener("click", () => closeWeekStatsSheet());
+  document.getElementById("week-stats-prev")?.addEventListener("click", () => moveWeekStats(-1));
+  document.getElementById("week-stats-next")?.addEventListener("click", () => moveWeekStats(1));
+  document.getElementById("week-stats-records")?.addEventListener("click", () => {
+    closeWeekStatsSheet({ restoreFocus: false });
+    go("records");
+  });
+  document.getElementById("week-stats-write")?.addEventListener("click", () => {
+    closeWeekStatsSheet({ restoreFocus: false });
+    go("diary");
+  });
+  document.addEventListener("keydown", (event) => {
+    const sheet = document.getElementById("week-stats-sheet");
+    if (!sheet?.classList.contains("show")) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeWeekStatsSheet();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = [...sheet.querySelectorAll('button:not([disabled]),[href],select,input,[tabindex]:not([tabindex="-1"])')];
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  });
 }
 function updateBackupStats() {
   const el = document.getElementById("backup-local-desc");
@@ -953,6 +1122,9 @@ function go(id) {
     else window.handamAdminPending = options;
     return;
   }
+  if (document.getElementById("week-stats-sheet")?.classList.contains("show")) {
+    closeWeekStatsSheet({ restoreFocus: false });
+  }
   window.handamAdminPending = undefined;
   window.handamAdmin?.unmount();
   const target = document.getElementById("page-" + id);
@@ -960,7 +1132,7 @@ function go(id) {
   if (AUTH_PAGES.has(id)) closeSheet({ restoreFocus: false });
   document.querySelectorAll(".page").forEach((p) => p.classList.toggle("active", p === target));
   document.querySelectorAll(".nav-item").forEach((n) => {
-    const active = n.dataset.page === id;
+    const active = n.dataset.page === (id === "records" ? "home" : id);
     n.classList.toggle("active", active);
     if (active) n.setAttribute("aria-current", "page");
     else n.removeAttribute("aria-current");
@@ -978,7 +1150,10 @@ function go(id) {
     setTimeout(animateGauge, fortuneAnim.gaugeDelayMs ?? 160);
     if (!state.fortuneBirthday) setTimeout(openSheet, fortuneAnim.sheetOpenDelayMs ?? 280);
   }
-  if (id === "records") renderRecordsPage();
+  if (id === "records") {
+    renderRecordsStats();
+    renderRecordsPage();
+  }
   if (id === "prompts") renderPromptRecommendations();
   if (id === "home" || id === "settings") {
     updateUserUI();
@@ -1276,13 +1451,14 @@ function startPromptDiary(card) {
   go("manual");
 }
 
-function createRecordRow(record) {
+function createRecordRow(record, returnPage = "records") {
   const row = document.createElement("div");
   row.className = "diary-row tap";
   const chipClass = getEmotionChipClass(record.mood);
   row.innerHTML = `<div class="diary-thumb"><i class="fa-solid fa-pen-nib"></i></div><div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:800">${escapeHtml(record.title)}</div><div class="muted" style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${formatDate(record.createdAt)} · ${escapeHtml(record.body)}</div></div><span class="chip ${chipClass}">${escapeHtml(record.mood)}</span>`;
   row.addEventListener("click", () => {
     state.selectedRecordId = record.id;
+    state.recordDetailReturnPage = returnPage;
     document.getElementById("record-title").textContent = record.title;
     document.getElementById("record-date").textContent = formatDate(record.createdAt);
     const moodEl = document.getElementById("record-mood");
@@ -1297,8 +1473,24 @@ function createRecordRow(record) {
 function renderHomeRecords() {
   const box = document.getElementById("home-record-list");
   box.innerHTML = "";
-  state.records.slice(0, 3).forEach((record) => box.appendChild(createRecordRow(record)));
+  state.records.slice(0, 3).forEach((record) => box.appendChild(createRecordRow(record, "home")));
   refreshInteractions();
+}
+function renderRecordsStats() {
+  const stats = calculateDiaryStats(statsEntries());
+  const [title, copy] = insightForStats(stats, "전체");
+  const mood = stats.dominantMood;
+  document.getElementById("records-insight-title").textContent = title;
+  document.getElementById("records-insight-copy").textContent = copy;
+  document.getElementById("records-insight-emoji").textContent = mood ? moodToEmoji(mood) : "📝";
+  document.getElementById("records-days-written").textContent = `${stats.daysWritten}일`;
+  document.getElementById("records-longest-streak").textContent = `${stats.longestStreak}일`;
+  renderMoodDistribution(
+    document.getElementById("records-distribution-bar"),
+    document.getElementById("records-distribution-legend"),
+    stats.distribution,
+    5
+  );
 }
 function renderRecordsPage() {
   const box = document.getElementById("records-list");
@@ -1308,7 +1500,15 @@ function renderRecordsPage() {
   if (moodFilter !== "all") rows = rows.filter((r) => moodMatchesFilter(r.mood, moodFilter));
   rows.sort((a, b) => (dateFilter === "oldest" ? a.createdAt.localeCompare(b.createdAt) : b.createdAt.localeCompare(a.createdAt)));
   box.innerHTML = "";
-  rows.slice(0, 200).forEach((record) => box.appendChild(createRecordRow(record)));
+  const hasRecords = state.records.length > 0;
+  document.getElementById("records-empty").hidden = hasRecords;
+  document.querySelector(".records-filter").hidden = !hasRecords;
+  document.querySelector(".records-list-card").hidden = !hasRecords;
+  if (hasRecords && !rows.length) {
+    box.innerHTML = '<div class="records-filter-empty">선택한 감정에 맞는 기록이 없어요.</div>';
+  } else {
+    rows.slice(0, 200).forEach((record) => box.appendChild(createRecordRow(record, "records")));
+  }
   refreshInteractions();
 }
 async function reloadRecords() {
@@ -1331,6 +1531,7 @@ async function reloadRecords() {
 }
 function renderRecordsUI() {
   renderHomeRecords();
+  renderRecordsStats();
   renderRecordsPage();
   renderPromptRecommendations();
   updateDiaryStatsUI();
@@ -1353,6 +1554,9 @@ async function deleteCurrentRecord() {
     console.error("일기 삭제 실패", error);
     showToast("기록을 삭제하지 못했어요.");
   }
+}
+function goBackFromRecordDetail() {
+  go(state.recordDetailReturnPage === "home" ? "home" : "records");
 }
 
 function clearAuthFeedback(form) {
@@ -2044,6 +2248,7 @@ function bindSegmentButtons() {
 }
 
 window.deleteCurrentRecord = deleteCurrentRecord;
+window.goBackFromRecordDetail = goBackFromRecordDetail;
 window.go = go; window.toggleTheme = toggleTheme; window.toggleSwitch = toggleSwitch;
 window.openCameraOCR = openCameraOCR; window.openGalleryOCR = openGalleryOCR; window.resetOCR = resetOCR;
 window.refreshPrompts = refreshPrompts; window.startPromptDiary = startPromptDiary; window.openManualDiary = openManualDiary; window.saveManualDiary = saveManualDiary;
@@ -2144,7 +2349,7 @@ function bindAuthUI() {
   state.settings.theme = localStorage.getItem("handam-theme") || state.settings.theme;
   applyUserSettings(state.settings, { applyFortune: false });
   await loadAppData();
-  bindSegmentButtons(); bindFindAccountTabs(); bindAuthUI(); bindSettingsPage();
+  bindSegmentButtons(); bindFindAccountTabs(); bindAuthUI(); bindSettingsPage(); bindWeekStatsSheet();
   bindHomeWeekStrip();
   initFortune();
   fillBirthdaySelects();

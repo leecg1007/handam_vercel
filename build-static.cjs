@@ -8,6 +8,8 @@ const staticFiles = [
   "index.html",
   "styles.css",
   "app.js",
+  "week-calendar.js",
+  "diary-stats.js",
   "animations.js",
   "interactions.js",
   "prompt-animations.js",

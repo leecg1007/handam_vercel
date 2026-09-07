@@ -39,10 +39,14 @@
       </div>
 
       <!-- Weekly mood strip -->
-      <div class="card reveal" style="--d:.07s;padding:18px">
+      <div class="card tap reveal home-week-card" id="home-week-card" style="--d:.07s;padding:18px"
+           role="button" tabindex="0" aria-haspopup="dialog" aria-controls="week-stats-sheet" aria-expanded="false">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span class="h-sec">이번 주 마음 일기</span>
-          <span class="muted" id="home-week-summary" style="font-size:12px;font-weight:700">0일 기록</span>
+          <span style="display:flex;align-items:center;gap:8px">
+            <span class="muted" id="home-week-summary" style="font-size:12px;font-weight:700">0일 기록</span>
+            <i class="fa-solid fa-chevron-right home-week-chevron" aria-hidden="true"></i>
+          </span>
         </div>
         <div class="weekstrip" id="home-weekstrip">
           <div class="day"><span class="lbl">월</span><div class="dot"></div></div>
@@ -87,7 +91,7 @@
       <!-- Recent records -->
       <div class="reveal" style="--d:.22s;display:flex;justify-content:space-between;align-items:center;margin:26px 4px 12px">
         <span class="h-sec">최근 기록</span>
-        <button class="text-link" onclick="go('records')">전체보기</button>
+        <button class="text-link" id="home-records-all" onclick="go('records')">전체보기</button>
       </div>
       <div class="card reveal" style="--d:.25s;padding:6px" id="home-record-list"></div>
     </div>
@@ -354,12 +358,31 @@
 
   <!-- ============ ALL RECORDS ============ -->
   <div id="page-records" class="page">
-    <div class="pad">
+    <div class="pad records-pad">
       <div class="backbar reveal" style="--d:.02s">
         <button class="iconbtn" onclick="go('home')"><i class="fa-solid fa-arrow-left"></i></button>
         <h1 class="h-page">전체 기록</h1>
       </div>
-      <div class="card reveal" style="--d:.06s;padding:16px;display:flex;gap:10px">
+      <section class="records-overview reveal" style="--d:.05s" aria-labelledby="records-insight-title">
+        <div class="records-insight">
+          <div class="records-insight-emoji" id="records-insight-emoji" aria-hidden="true">📝</div>
+          <div>
+            <p class="records-kicker">지금까지의 마음</p>
+            <h2 id="records-insight-title">첫 마음을 기다리고 있어요</h2>
+            <p id="records-insight-copy">오늘의 작은 마음부터 천천히 남겨보세요.</p>
+          </div>
+        </div>
+        <div class="records-distribution-block">
+          <h3>감정 전체 분포</h3>
+          <div class="mood-distribution-bar" id="records-distribution-bar" role="img" aria-label="감정 기록 없음"></div>
+          <div class="mood-distribution-legend" id="records-distribution-legend"></div>
+        </div>
+        <div class="records-metrics">
+          <div><i class="fa-regular fa-calendar" aria-hidden="true"></i><span>기록한 날<strong id="records-days-written">0일</strong></span></div>
+          <div><i class="fa-solid fa-fire-flame-curved" aria-hidden="true"></i><span>최장 연속<strong id="records-longest-streak">0일</strong></span></div>
+        </div>
+      </section>
+      <div class="card records-filter reveal" style="--d:.08s;padding:16px;display:flex;gap:10px">
         <select class="field" id="filter-mood">
           <option value="all">감정 전체</option>
         </select>
@@ -368,7 +391,13 @@
           <option value="oldest">오래된순</option>
         </select>
       </div>
-      <div class="card reveal" style="--d:.09s;padding:6px" id="records-list"></div>
+      <div class="card records-list-card reveal" style="--d:.11s;padding:6px" id="records-list"></div>
+      <div class="records-empty" id="records-empty" hidden>
+        <i class="fa-regular fa-pen-to-square" aria-hidden="true"></i>
+        <strong>아직 기록이 없어요</strong>
+        <p>첫 마음을 남기면 이곳에 감정의 흐름이 쌓여요.</p>
+        <button class="btn btn-primary" onclick="go('diary')">첫 기록 작성하기</button>
+      </div>
     </div>
   </div>
 
@@ -376,7 +405,7 @@
   <div id="page-record-detail" class="page">
     <div class="pad">
       <div class="backbar reveal" style="--d:.02s">
-        <button class="iconbtn" onclick="go('records')"><i class="fa-solid fa-arrow-left"></i></button>
+        <button class="iconbtn" onclick="goBackFromRecordDetail()"><i class="fa-solid fa-arrow-left"></i></button>
         <h1 class="h-page">기록 상세</h1>
       </div>
       <div class="card reveal" style="--d:.07s">
@@ -657,6 +686,49 @@
     </div>
     <button class="btn btn-primary" style="margin-top:16px" onclick="updateFortuneFromBirthday()">운세 계산하기</button>
   </div>
+
+  <!-- Bottom sheet: weekly mood statistics -->
+  <div class="scrim" id="week-stats-scrim" aria-hidden="true"></div>
+  <section class="sheet week-stats-sheet" id="week-stats-sheet" role="dialog" aria-modal="true"
+           aria-labelledby="week-stats-title" aria-hidden="true" inert>
+    <div class="grabber"></div>
+    <div class="week-stats-heading">
+      <div>
+        <h2 id="week-stats-title">이번 주 마음</h2>
+        <p class="muted" id="week-stats-range">이번 주</p>
+      </div>
+      <button class="week-sheet-close" id="week-stats-close" type="button" aria-label="주간 마음 통계 닫기">
+        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+      </button>
+    </div>
+    <div class="week-range-nav" aria-label="주간 이동">
+      <button id="week-stats-prev" type="button" aria-label="이전 주 보기"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button>
+      <span id="week-stats-range-compact">이번 주</span>
+      <button id="week-stats-next" type="button" aria-label="다음 주 보기"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+    </div>
+    <div class="week-stats-days" id="week-stats-days"></div>
+    <div id="week-stats-content">
+      <div class="week-stats-insight">
+        <i class="fa-solid fa-seedling" aria-hidden="true"></i>
+        <div><strong id="week-stats-insight-title">마음 기록을 기다리고 있어요</strong><p id="week-stats-insight-copy">이번 주의 첫 마음을 남겨보세요.</p></div>
+      </div>
+      <div class="week-stats-metrics">
+        <div><span>기록</span><strong id="week-stats-days-written">0일</strong></div>
+        <div><span>현재 연속</span><strong id="week-stats-current-streak">0일</strong></div>
+      </div>
+      <div class="mood-distribution-bar" id="week-stats-distribution-bar" role="img" aria-label="감정 기록 없음"></div>
+      <div class="mood-distribution-legend week-stats-legend" id="week-stats-distribution-legend"></div>
+    </div>
+    <div class="week-stats-empty" id="week-stats-empty" hidden>
+      <i class="fa-regular fa-face-smile" aria-hidden="true"></i>
+      <strong>이 주에는 아직 마음 기록이 없어요</strong>
+      <p>작은 한 줄도 한 주를 돌아보는 시작이 돼요.</p>
+    </div>
+    <div class="week-stats-actions">
+      <button class="btn btn-line" id="week-stats-records" type="button">전체 기록 보기</button>
+      <button class="btn btn-primary" id="week-stats-write" type="button">오늘 기록하기</button>
+    </div>
+  </section>
 
   <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
