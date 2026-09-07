@@ -290,70 +290,67 @@
   <!-- ============ SETTINGS ============ -->
   <div id="page-settings" class="page">
     <div class="pad">
-      <div class="reveal" style="--d:.02s;padding:16px 0 6px"><h1 class="h-page">내 정보</h1></div>
+      <div class="settings-heading reveal"><h1 class="h-page">내 정보</h1></div>
 
-      <div class="card reveal" style="--d:.06s;margin-top:14px;display:flex;align-items:center;gap:14px">
-        <div class="avatar" id="settings-avatar">한</div>
-        <div style="flex:1">
-          <div style="font-size:17px;font-weight:800" id="settings-display-name">한담</div>
-          <div class="muted" style="font-size:12px;font-weight:600" id="settings-email">로그인이 필요해요</div>
-        </div>
-        <span class="chip" style="background:var(--accent-soft);color:var(--accent)">한담 PRO</span>
-      </div>
-
-      <div class="reveal" style="--d:.11s;margin-top:22px">
-        <div class="group-label">화면</div>
-        <div class="list">
-          <div class="list-item">
-            <div class="lead"><i class="fa-solid fa-moon"></i> 다크 모드</div>
-            <div class="switch" id="dark-switch" onclick="toggleTheme(event)"></div>
-          </div>
-          <div class="list-item">
-            <div class="lead"><i class="fa-solid fa-bell"></i> 기록 알림</div>
-            <div class="switch on" id="record-reminder-switch" data-setting="recordReminder" onclick="toggleSwitch(event, this, '기록 알림 설정을 바꿨어요')"></div>
-          </div>
+      <div class="card settings-profile reveal">
+        <div class="avatar" id="settings-avatar" aria-hidden="true">한</div>
+        <div class="settings-identity">
+          <div id="settings-display-name">한담</div>
+          <div class="muted" id="settings-email">로그인이 필요해요</div>
         </div>
       </div>
 
-      <div class="reveal" style="--d:.16s;margin-top:20px">
-        <div class="group-label">AI 서비스 설정</div>
+      <section class="settings-section settings-preferences reveal" aria-labelledby="settings-screen-label">
+        <h2 class="group-label" id="settings-screen-label">화면 · 알림</h2>
         <div class="list">
-          <div class="list-item" style="flex-direction:column;align-items:stretch;gap:11px">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <div class="lead"><i class="fa-solid fa-gauge-high"></i> 요약 정확도</div>
-              <span class="muted" style="font-size:11px;font-weight:700">요금제에 따라 달라요</span>
-            </div>
-            <div class="seg seg-elastic" data-setting-segment="summaryQuality">
-              <button data-value="표준">표준</button><button class="on" data-value="고급">고급</button><button data-value="최고">최고</button>
+          <button type="button" class="list-item settings-action" id="dark-switch" role="switch" aria-checked="false" data-settings-action="theme">
+            <span class="lead"><i class="fa-solid fa-moon" aria-hidden="true"></i> 다크 모드</span>
+            <span class="switch" aria-hidden="true"></span>
+          </button>
+          <div class="list-item settings-unavailable" aria-disabled="true">
+            <span class="lead"><i class="fa-solid fa-bell" aria-hidden="true"></i> 기록 알림</span>
+            <span class="settings-coming-soon" id="record-reminder-switch">준비 중</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-section settings-ai reveal" aria-labelledby="settings-ai-label">
+        <h2 class="group-label" id="settings-ai-label">AI 서비스 설정</h2>
+        <div class="list">
+          <div class="list-item settings-choice">
+            <div class="lead" id="settings-quality-label"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i> 요약 정확도</div>
+            <p class="settings-help" id="settings-quality-help">선택한 수준을 다음 AI 요약에 반영해요.</p>
+            <div class="seg seg-elastic" role="radiogroup" aria-labelledby="settings-quality-label" aria-describedby="settings-quality-help" data-setting-segment="summaryQuality">
+              <button type="button" role="radio" aria-checked="false" tabindex="-1" data-value="표준">표준</button><button type="button" role="radio" aria-checked="true" tabindex="0" class="on" data-value="고급">고급</button><button type="button" role="radio" aria-checked="false" tabindex="-1" data-value="최고">최고</button>
             </div>
           </div>
-          <div class="list-item" style="flex-direction:column;align-items:stretch;gap:11px">
-            <div class="lead"><i class="fa-solid fa-comment-dots"></i> AI 페르소나</div>
-            <div class="seg seg-elastic" data-setting-segment="persona">
-              <button class="on" data-value="따뜻한 공감형">따뜻한 공감형</button><button data-value="담백한 정리형">담백한 정리형</button>
+          <div class="list-item settings-choice">
+            <div class="lead" id="settings-persona-label"><i class="fa-solid fa-comment-dots" aria-hidden="true"></i> AI 페르소나</div>
+            <div class="seg seg-elastic" role="radiogroup" aria-labelledby="settings-persona-label" data-setting-segment="persona">
+              <button type="button" role="radio" aria-checked="true" tabindex="0" class="on" data-value="따뜻한 공감형">따뜻한 공감형</button><button type="button" role="radio" aria-checked="false" tabindex="-1" data-value="담백한 정리형">담백한 정리형</button>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div class="reveal" style="--d:.21s;margin-top:20px">
-        <div class="group-label">계정 · 데이터</div>
+      <section class="settings-section settings-account reveal" aria-labelledby="settings-account-label">
+        <h2 class="group-label" id="settings-account-label">계정 · 데이터</h2>
         <div class="list">
-          <div class="list-item tap" onclick="go('password')">
-            <div class="lead"><i class="fa-solid fa-key"></i> 비밀번호 변경</div>
-            <i class="fa-solid fa-chevron-right muted" style="font-size:12px"></i>
-          </div>
-          <div class="list-item tap" onclick="go('backup')">
-            <div class="lead"><i class="fa-solid fa-database"></i> 일기 백업 · 내보내기</div>
-            <i class="fa-solid fa-chevron-right muted" style="font-size:12px"></i>
-          </div>
-          <div class="list-item tap" onclick="logout()">
-            <div class="lead" style="color:#BC5743"><i class="fa-solid fa-right-from-bracket" style="color:#BC5743"></i> 로그아웃</div>
-          </div>
+          <button type="button" class="list-item settings-action tap" data-settings-action="password">
+            <span class="lead"><i class="fa-solid fa-key" aria-hidden="true"></i> 비밀번호 변경</span>
+            <i class="fa-solid fa-chevron-right muted" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="list-item settings-action tap" data-settings-action="backup">
+            <span class="lead"><i class="fa-solid fa-database" aria-hidden="true"></i> 일기 백업 · 내보내기</span>
+            <i class="fa-solid fa-chevron-right muted" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="list-item settings-action settings-logout tap" data-settings-action="logout">
+            <span class="lead"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> 로그아웃</span>
+          </button>
         </div>
-      </div>
-      <p class="muted reveal" style="--d:.26s;text-align:center;font-size:11px;font-weight:600;margin-top:18px">
-        한담 v1.0.0 · 설정과 일기는 계정에 안전하게 동기화돼요
+      </section>
+      <p class="settings-footer muted reveal">
+        한담 v1.0.0 · 설정은 이 기기에 먼저 적용하고 계정에 동기화해요.
       </p>
     </div>
   </div>
@@ -622,7 +619,7 @@
     <button class="btn btn-primary" style="margin-top:16px" onclick="updateFortuneFromBirthday()">운세 계산하기</button>
   </div>
 
-  <div class="toast" id="toast"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 </div>
 

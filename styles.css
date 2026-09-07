@@ -538,6 +538,51 @@ input,textarea,select{font-size:16px}
 .emo-opt.sel{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 6px 16px -8px rgba(198,106,56,.45)}
 
 /* ===== Settings ===== */
+#page-settings{
+  --text-muted:#70665B;
+  --accent:#9E4E2C;
+  --settings-danger:#A93D2D;
+  scroll-padding:20px 0 calc(112px + env(safe-area-inset-bottom));
+}
+[data-theme="dark"] #page-settings{
+  --text-muted:#B2A796;
+  --accent:#E09868;
+  --settings-danger:#F0A08C;
+}
+.settings-heading{--d:.02s;padding:16px 0 6px}
+.settings-profile{--d:.06s;margin-top:14px;display:flex;align-items:center;gap:14px}
+.settings-profile .avatar{flex:0 0 58px}
+.settings-identity{flex:1;min-width:0;overflow-wrap:anywhere}
+#settings-display-name{font-size:17px;font-weight:800;line-height:1.5}
+#settings-email{font-size:13px;font-weight:600;line-height:1.5;margin-top:2px}
+.settings-section{margin-top:20px}
+.settings-preferences{--d:.11s;margin-top:22px}
+.settings-ai{--d:.16s}
+.settings-account{--d:.21s}
+#page-settings .settings-action{
+  width:100%;min-height:56px;border:0;border-bottom:1px solid var(--line);
+  background:transparent;color:var(--text);font:inherit;text-align:left;cursor:pointer;
+}
+#page-settings .settings-action:last-child{border-bottom:0}
+#page-settings .settings-action:hover{background:var(--surface-2)}
+#page-settings .list-item .lead{white-space:normal;line-height:1.5}
+#page-settings .settings-action > .switch{flex:none}
+#page-settings .settings-action > .fa-chevron-right{font-size:12px}
+#page-settings .settings-choice{flex-direction:column;align-items:stretch;gap:10px}
+.settings-help{font-size:12px;line-height:1.6;color:var(--text-muted)}
+.settings-coming-soon{flex:none;font-size:12px;font-weight:700;color:var(--text-muted)}
+.settings-unavailable{cursor:default}
+#page-settings .settings-logout,
+#page-settings .settings-logout .lead i{color:var(--settings-danger)}
+#page-settings .seg button{min-height:44px;min-width:0;padding:8px 5px;line-height:1.5;font-size:13px}
+#page-settings .seg button[aria-checked="true"]{text-decoration:underline;text-underline-offset:4px}
+#page-settings :focus-visible{outline:2px solid var(--accent);outline-offset:-4px}
+#dark-switch[aria-checked="true"] .switch{background:var(--accent)}
+#dark-switch[aria-checked="true"] .switch::after{left:21px}
+.settings-footer{--d:.26s;text-align:center;font-size:12px;font-weight:600;line-height:1.7;margin-top:18px}
+@media(prefers-reduced-motion:reduce){
+  #page-settings *,#page-settings *::before,#page-settings *::after{animation:none!important;transition:none!important}
+}
 .avatar{
   width:58px;height:58px;border-radius:20px;
   background:var(--grad-fortune);color:#fff;
@@ -694,7 +739,7 @@ input,textarea,select{font-size:16px}
 .list-item.tap{cursor:pointer;transition:background .14s ease}
 .list-item.tap:active{background:var(--surface-2)}
 .toast{
-  position:absolute;left:22px;right:22px;bottom:102px;z-index:100;
+  position:absolute;left:22px;right:22px;bottom:calc(102px + env(safe-area-inset-bottom));z-index:100;
   background:rgba(43,39,34,.94);color:#fff;border-radius:16px;padding:13px 16px;
   font-size:13px;font-weight:800;text-align:center;box-shadow:var(--shadow-lg);
   opacity:0;transform:translateY(18px) scale(.96);

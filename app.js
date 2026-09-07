@@ -180,12 +180,16 @@ function applyUserSettings(settings, { applyFortune = true } = {}) {
   const next = normalizeUserSettings(settings);
   state.settings = next;
   applyTheme(next.theme, { save: false });
-  document.getElementById("record-reminder-switch")?.classList.toggle("on", next.recordReminder);
   document.getElementById("fortune-lunar-switch")?.classList.toggle("on", next.lunarCalendar);
   document.querySelectorAll("[data-setting-segment]").forEach((segment) => {
     const key = segment.dataset.settingSegment;
     segment.querySelectorAll("button").forEach((button) => {
-      button.classList.toggle("on", button.dataset.value === String(next[key]));
+      const selected = button.dataset.value === String(next[key]);
+      button.classList.toggle("on", selected);
+      if (button.getAttribute("role") === "radio") {
+        button.setAttribute("aria-checked", String(selected));
+        button.tabIndex = selected ? 0 : -1;
+      }
     });
   });
   if (applyFortune) {
@@ -219,7 +223,7 @@ async function saveSettingsPatch(patch, { quiet = false } = {}) {
       { merge: true }
     );
   } catch (error) {
-    if (!quiet) showToast("설정을 서버에 저장하지 못했어요. 연결을 확인해주세요.");
+    if (!quiet) showToast("이 기기에 적용했지만 계정에 동기화하지 못했어요. 연결을 확인하고 다시 선택해주세요.");
     throw error;
   }
   return next;
@@ -927,14 +931,14 @@ function applyTheme(t, { save = true } = {}) {
   const themeBtn = document.getElementById("theme-btn");
   if (themeBtn) themeBtn.innerHTML = theme === "dark" ? '<i class="fa-solid fa-sun"></i>' : '<i class="fa-solid fa-moon"></i>';
   document.getElementById("dark-switch")?.classList.toggle("on", theme === "dark");
+  document.getElementById("dark-switch")?.setAttribute("aria-checked", String(theme === "dark"));
   localStorage.setItem("handam-theme", theme);
   if (save && state.settings) saveSettingsPatch({ theme }).catch(() => {});
 }
 function toggleTheme(event) {
   if (event) event.stopPropagation();
   const cur = document.documentElement.getAttribute("data-theme");
-  applyTheme(cur === "dark" ? "light" : "dark");
-  showToast("화면 설정을 저장했어요.");
+  void saveSettingsWithFeedback({ theme: cur === "dark" ? "light" : "dark" });
 }
 function toggleSwitch(event, element, message) {
   if (event) event.stopPropagation();
@@ -947,10 +951,13 @@ function toggleSwitch(event, element, message) {
 function showToast(message) {
   const toast = document.getElementById("toast");
   const duration = getAnimations().toast?.durationMs ?? 1900;
-  toast.textContent = message;
+  // Empty the live region first so repeating the same status is announced again.
+  toast.textContent = "";
+  clearTimeout(window._toastMessageTimer);
+  window._toastMessageTimer = setTimeout(() => { toast.textContent = message; }, 30);
   toast.classList.add("show");
   clearTimeout(window._toastTimer);
-  window._toastTimer = setTimeout(() => toast.classList.remove("show"), duration);
+  window._toastTimer = setTimeout(() => toast.classList.remove("show"), Math.max(duration, message.length > 45 ? 6000 : 1900));
 }
 function openSheet() {
   const scrim = document.getElementById("scrim");
@@ -1757,6 +1764,49 @@ function initFortune() {
   renderFortuneUI();
 }
 
+let settingsFeedbackRevision = 0;
+async function saveSettingsWithFeedback(patch) {
+  const revision = ++settingsFeedbackRevision;
+  const uid = state.auth?.uid;
+  const isCurrent = () => revision === settingsFeedbackRevision && uid === state.auth?.uid;
+  try {
+    const pending = saveSettingsPatch(patch, { quiet: true });
+    showToast(uid ? "이 기기에 적용했어요. 계정에 동기화하고 있어요." : "이 기기에 설정을 적용했어요.");
+    await pending;
+    if (isCurrent()) showToast(uid ? "설정을 계정에 동기화했어요." : "이 기기에 설정을 저장했어요.");
+  } catch (_error) {
+    if (isCurrent()) showToast("계정 동기화에 실패했어요. 이 기기의 설정은 유지돼요. 연결을 확인하고 다시 선택해주세요.");
+  }
+}
+
+function bindSettingsPage() {
+  const page = document.getElementById("page-settings");
+  page.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-settings-action]");
+    if (!button || !page.contains(button)) return;
+    const action = button.dataset.settingsAction;
+    if (action === "theme") toggleTheme(event);
+    else if (action === "logout") void logout();
+    else if (action === "password" || action === "backup") go(action);
+  });
+  page.querySelectorAll('[role="radiogroup"]').forEach((group) => {
+    group.addEventListener("keydown", (event) => {
+      const buttons = [...group.querySelectorAll('[role="radio"]')];
+      const index = buttons.indexOf(event.target);
+      if (index < 0) return;
+      let next;
+      if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % buttons.length;
+      else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index + buttons.length - 1) % buttons.length;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = buttons.length - 1;
+      else return;
+      event.preventDefault();
+      buttons[next].focus();
+      buttons[next].click();
+    });
+  });
+}
+
 function bindSegmentButtons() {
   document.querySelectorAll(".seg:not(.seg-elastic)").forEach((seg) => {
     seg.addEventListener("click", (e) => {
@@ -1773,9 +1823,10 @@ function bindSegmentButtons() {
       if (!btn) return;
       const setting = seg.dataset.settingSegment;
       if (setting && btn.dataset.value) {
-        saveSettingsPatch({ [setting]: btn.dataset.value }).catch(() => {});
+        void saveSettingsWithFeedback({ [setting]: btn.dataset.value });
+      } else {
+        showToast(`${btn.textContent.trim()} 설정을 적용했어요`);
       }
-      showToast(`${btn.textContent.trim()} 설정을 적용했어요`);
     });
   });
 }
@@ -1809,7 +1860,7 @@ function bindFindAccountTabs() {
   state.settings.theme = localStorage.getItem("handam-theme") || state.settings.theme;
   applyUserSettings(state.settings, { applyFortune: false });
   await loadAppData();
-  bindSegmentButtons(); bindFindAccountTabs();
+  bindSegmentButtons(); bindFindAccountTabs(); bindSettingsPage();
   bindHomeWeekStrip();
   initFortune();
   fillBirthdaySelects();
