@@ -16,6 +16,7 @@ const staticFiles = [
   "segment-control.js",
   "db-worker.js",
   "manifest.webmanifest",
+  "apple-touch-icon.png",
 ];
 
 console.log("Building React UI (react-bits splash)...");
@@ -27,6 +28,8 @@ fs.mkdirSync(output, { recursive: true });
 for (const file of staticFiles) {
   fs.copyFileSync(path.join(root, file), path.join(output, file));
 }
+
+fs.cpSync(path.join(root, "icons"), path.join(output, "icons"), { recursive: true });
 
 const dataDir = path.join(root, "data");
 if (fs.existsSync(dataDir)) {
